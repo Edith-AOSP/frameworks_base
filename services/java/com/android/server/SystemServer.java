@@ -173,6 +173,7 @@ import com.android.server.coverage.CoverageService;
 import com.android.server.cpu.CpuMonitorService;
 import com.android.server.credentials.CredentialManagerService;
 import com.android.server.criticalevents.CriticalEventLog;
+import com.android.server.edith.EdithDeviceConfigService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
 import com.android.server.devicestate.DeviceStateManagerService;
 import com.android.server.display.DisplayManagerService;
@@ -2898,6 +2899,11 @@ public final class SystemServer implements Dumpable {
             // LiveDisplay
             t.traceBegin("StartLiveDisplayService");
             mSystemServiceManager.startService(LiveDisplayService.class);
+            t.traceEnd();
+
+            // EdithDeviceConfigService
+            t.traceBegin("StartEdithDeviceConfigService");
+            mSystemServiceManager.startService(EdithDeviceConfigService.class);
             t.traceEnd();
 
             if (SystemProperties.getBoolean(
