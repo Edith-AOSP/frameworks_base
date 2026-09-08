@@ -193,7 +193,10 @@ public class Utils {
 
     /** Returns a circular icon for a user. */
     public static Drawable getUserIcon(Context context, UserManager um, UserInfo user) {
-        final int iconSize = UserIconDrawable.getDefaultSize(context);
+        int iconSize = UserIconDrawable.getDefaultSize(context);
+        if (iconSize <= 0) {
+            iconSize = (int) (48 * context.getResources().getDisplayMetrics().density);
+        }
         if (user.isManagedProfile()) {
             Drawable drawable = UserIconDrawable.getManagedUserDrawable(context);
             drawable.setBounds(0, 0, iconSize, iconSize);

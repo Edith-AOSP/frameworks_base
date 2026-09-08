@@ -129,8 +129,19 @@ public class UserIconDrawable extends Drawable implements Drawable.Callback {
      * @return size in pixels
      */
     public static int getDefaultSize(Context context) {
-        return context.getResources()
-                .getDimensionPixelSize(com.android.internal.R.dimen.user_icon_size);
+        int defaultSize = 0;
+        if (context != null) {
+            try {
+                defaultSize = context.getResources()
+                        .getDimensionPixelSize(com.android.internal.R.dimen.user_icon_size);
+            } catch (Exception e) {
+                // Ignore and fall back
+            }
+            if (defaultSize <= 0) {
+                defaultSize = (int) (48 * context.getResources().getDisplayMetrics().density);
+            }
+        }
+        return defaultSize;
     }
 
     public UserIconDrawable() {
@@ -380,6 +391,15 @@ public class UserIconDrawable extends Drawable implements Drawable.Callback {
      * This effectively turns this into a static drawable.
      */
     public UserIconDrawable bake() {
+        if (mSize <= 0) {
+            if (mUserDrawable != null && mUserDrawable.getIntrinsicWidth() > 0) {
+                mSize = mUserDrawable.getIntrinsicWidth();
+            } else if (mUserIcon != null && mUserIcon.getWidth() > 0) {
+                mSize = mUserIcon.getWidth();
+            } else if (mIntrinsicRadius > 0) {
+                mSize = (int) (mIntrinsicRadius * 2);
+            }
+        }
         if (mSize <= 0) {
             throw new IllegalStateException("Baking requires an explicit intrinsic size");
         }
