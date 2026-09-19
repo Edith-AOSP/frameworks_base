@@ -78,4 +78,14 @@ sealed interface FooterActionsButtonViewModel {
             Utils.getColorAttrDefaultColor(context, R.attr.onShadeActive)
         @AttrRes override val backgroundColorFallback: Int = R.attr.shadeActive
     }
+
+    /** The "edit tiles" button that opens the QS edit mode. */
+    data class EditModeActionViewModel(
+        override val icon: Icon,
+        override val onClick: (Expandable) -> Unit,
+    ) : FooterActionsButtonViewModel {
+        override val id: Int = R.id.qs_footer_edit
+        @ColorInt override val iconTintFallback: Int? = null
+        @AttrRes override val backgroundColorFallback: Int = R.attr.shadeInactive
+    }
 }

@@ -414,6 +414,8 @@ android_library {
         "res-product",
         "res-keyguard",
         "res",
+        // Edith-only resources (media player strings/dimens, its drawables).
+        "edith/res",
     ],
     static_libs: [
         "SystemUISharedLib",
@@ -479,6 +481,9 @@ android_library {
         "src/**/*.kt",
         "src/**/*.java",
         "src/**/I*.aidl",
+        // Edith's own code, kept out of the stock trees so upstream diffs stay small. Packages are
+        // unchanged (still com.android.systemui.*), so nothing else has to import differently.
+        "edith/src/**/*.kt",
         "compose/features/src/**/*.kt",
         "compose/facade/enabled/src/**/*.kt",
     ] + select(product_variable("debuggable"), {
@@ -488,6 +493,7 @@ android_library {
     defaults: ["SystemUI-srcs-defaults"],
     static_libs: [
         "//frameworks/libs/systemui:compilelib",
+        "ProgressiveBlurComposeLib",
         "com.android.systemui.bundle.phone_api",
         "SystemUI-res",
         "WifiTrackerLib",

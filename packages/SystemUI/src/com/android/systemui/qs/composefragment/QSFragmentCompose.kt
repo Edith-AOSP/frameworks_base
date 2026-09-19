@@ -93,6 +93,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced
+import com.android.compose.PlatformSliderDefaults
 import com.android.compose.animation.scene.ContentKey
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.ElementKey
@@ -105,6 +106,7 @@ import com.android.compose.animation.scene.rememberMutableSceneTransitionLayoutS
 import com.android.compose.animation.scene.transitions
 import com.android.compose.gesture.gesturesDisabled
 import com.android.compose.modifiers.height
+import androidx.compose.foundation.layout.height as staticHeight
 import com.android.compose.modifiers.padding
 import com.android.compose.modifiers.thenIf
 import com.android.compose.theme.PlatformTheme
@@ -142,7 +144,11 @@ import com.android.systemui.qs.composefragment.ui.toEditMode
 import com.android.systemui.qs.composefragment.viewmodel.QSFragmentComposeViewModel
 import com.android.systemui.qs.footer.ui.compose.FooterActions
 import com.android.systemui.qs.panels.shared.model.QSFragmentComposeClippingTableLog
+import com.android.systemui.qs.edith.EditZone
+import com.android.systemui.qs.edith.EdithEditLanding
+import com.android.systemui.qs.edith.QuickActionsEdit
 import com.android.systemui.qs.panels.ui.compose.EditMode
+import com.android.systemui.qs.panels.ui.compose.QuickActionsGrid
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
 import com.android.systemui.qs.panels.ui.compose.TileGrid
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
@@ -158,6 +164,7 @@ import com.android.systemui.util.asIndenting
 import com.android.systemui.util.kotlin.pairwise
 import com.android.systemui.util.printSection
 import com.android.systemui.util.println
+import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSlider
 import java.io.PrintWriter
 import java.util.function.Consumer
 import javax.inject.Inject
@@ -730,6 +737,7 @@ constructor(
                         QuickQuickSettings(
                             viewModel = viewModel.quickQuickSettingsViewModel,
                             listening = isListening,
+                            edithStyle = viewModel.containerViewModel.edithTileStyle,
                         )
                     }
                 val Media =
@@ -743,7 +751,7 @@ constructor(
                                 modifier = Modifier.requiredHeightIn(max = Dp.Infinity),
                                 mediaHost = viewModel.qqsMediaHost,
                                 mediaPresentationStyle =
-                                    if (viewModel.qqsMediaInRow) {
+                                    if (viewModel.compactMediaInQs || viewModel.qqsMediaInRow) {
                                         MediaPresentationStyle.Compressed
                                     } else {
                                         MediaPresentationStyle.Default
@@ -754,6 +762,9 @@ constructor(
                                 visible = isListening,
                                 location = Media.Location.SHADE,
                                 expansion = { viewModel.expansionState.progress },
+                                // Only the stock in-row media is coupled to the panel expansion. The
+                                // Edith compact card is a static two-row card.
+                                animateWithExpansion = viewModel.qqsMediaInRow,
                             )
                         }
                     }
@@ -769,7 +780,23 @@ constructor(
                                 .padding(horizontal = qsHorizontalMargin())
                     ) {
                         QuickQuickSettingsLayout(
-                            tiles = Tiles,
+                            quickActions = {
+                                if (viewModel.containerViewModel.edithTileStyle.enabled) {
+                                    QuickActionsGrid(
+                                        viewModel = viewModel.quickActionsGridViewModel,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        listening = isListening,
+                                        edithStyle = viewModel.containerViewModel.edithTileStyle,
+                                    )
+                                }
+                            },
+                            // In the Edith style, QQS shows only the Quick Actions grid (plus media).
+                            tiles =
+                                if (viewModel.containerViewModel.edithTileStyle.enabled) {
+                                    {}
+                                } else {
+                                    Tiles
+                                },
                             media = Media,
                             mediaInRow = viewModel.qqsMediaInRow,
                         )
@@ -865,6 +892,52 @@ constructor(
                                     }
                                 }
                             }
+                        val Volume =
+                            @Composable {
+                                val volumeSliderViewModel = viewModel.volumeSliderViewModel
+                                val volumeSliderState by
+                                    volumeSliderViewModel.slider.collectAsStateWithLifecycle()
+                                Box(
+                                    Modifier.systemGestureExclusionInShade(
+                                        enabled = {
+                                            layoutState.transitionState is TransitionState.Idle &&
+                                                viewModel.isNotTransitioning
+                                        }
+                                    )
+                                ) {
+                                    AlwaysDarkMode {
+                                        VolumeSlider(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            showLabel = false,
+                                            state = volumeSliderState,
+                                            onValueChange = { newValue: Float ->
+                                                volumeSliderViewModel.onValueChanged(
+                                                    volumeSliderState,
+                                                    newValue,
+                                                )
+                                            },
+                                            onValueChangeFinished = {
+                                                volumeSliderViewModel.onValueChangeFinished()
+                                            },
+                                            onIconTapped = {
+                                                volumeSliderViewModel.toggleMuted(
+                                                    volumeSliderState
+                                                )
+                                            },
+                                            sliderColors =
+                                                PlatformSliderDefaults
+                                                    .defaultPlatformSliderColors(),
+                                            hapticsViewModelFactory =
+                                                volumeSliderViewModel
+                                                    .getSliderHapticsViewModelFactory(),
+                                            dimensions =
+                                                QuickSettingsShade.Dimensions
+                                                    .VolumeSliderDimensions,
+                                            iconAtStart = true,
+                                        )
+                                    }
+                                }
+                            }
                         // When always compose is false, this will always be true, and
                         // we'll be listening whenever this is composed. When always
                         // compose is true, we look a the second condition and we'll
@@ -898,12 +971,22 @@ constructor(
                                     MediaObject(
                                         mediaHost = viewModel.qsMediaHost,
                                         mediaViewModelFactory = viewModel.mediaViewModelFactory,
-                                        mediaPresentationStyle = MediaPresentationStyle.Default,
+                                        mediaPresentationStyle =
+                                            if (
+                                                viewModel.compactMediaInQsInExpanded ||
+                                                    viewModel.qsMediaInRow
+                                            ) {
+                                                MediaPresentationStyle.Compressed
+                                            } else {
+                                                MediaPresentationStyle.Default
+                                            },
                                         onSwipeToDismiss = viewModel::onMediaSwipeToDismiss,
                                         behavior = viewModel.qsMediaUiBehavior,
                                         visible = isListening,
                                         location = Media.Location.QS,
                                         expansion = { viewModel.expansionState.progress },
+                                        // Static compact card unless this is the stock in-row media.
+                                        animateWithExpansion = viewModel.qsMediaInRow,
                                     )
                                 }
                             }
@@ -918,9 +1001,25 @@ constructor(
                                     )
                         ) {
                             QuickSettingsLayout(
+                                quickActions = {
+                                    if (viewModel.containerViewModel.edithTileStyle.enabled) {
+                                        QuickActionsGrid(
+                                            viewModel = viewModel.quickActionsGridViewModel,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            listening = isListening,
+                                            edithStyle = viewModel.containerViewModel.edithTileStyle,
+                                        )
+                                    }
+                                },
                                 brightness =
                                     if (viewModel.isBrightnessSliderVisible) {
                                         { BrightnessSlider() }
+                                    } else {
+                                        {}
+                                    },
+                                volume =
+                                    if (viewModel.containerViewModel.edithTileStyle.enabled) {
+                                        { Volume() }
                                     } else {
                                         {}
                                     },
@@ -945,17 +1044,59 @@ constructor(
     }
 
     @Composable
-    private fun EditModeElement(modifier: Modifier = Modifier) {
+    private fun ContentScope.EditModeElement(modifier: Modifier = Modifier) {
         // No need for top padding, the Scaffold inside takes care of the correct insets
         val horizontalPadding = QuickSettingsShade.Dimensions.HorizontalPadding
-        EditMode(
-            viewModel = viewModel.containerViewModel.editModeViewModel,
-            modifier =
-                modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = { horizontalPadding.roundToPx() })
-                    .padding(top = { viewModel.qqsHeaderHeight }),
-        )
+        val editModifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = { horizontalPadding.roundToPx() })
+                .padding(top = { viewModel.qqsHeaderHeight })
+        val quickActionsEditor = viewModel.quickActionsEditViewModel
+        val stopEditing = viewModel.containerViewModel.editModeViewModel::stopEditing
+        if (viewModel.containerViewModel.edithTileStyle.enabled) {
+            LaunchedEffect(Unit) { quickActionsEditor.startEditing() }
+            val zone by quickActionsEditor.zone.collectAsStateWithLifecycle()
+            when (zone) {
+                EditZone.QuickActions -> {
+                    QuickActionsEdit(
+                        viewModel = quickActionsEditor,
+                        modifier = editModifier,
+                    )
+                }
+                EditZone.QsTiles -> {
+                    EditMode(
+                        viewModel = viewModel.containerViewModel.editModeViewModel,
+                        modifier = editModifier,
+                        onStopEditing = quickActionsEditor::backToLanding,
+                    )
+                }
+                EditZone.Landing,
+                EditZone.None -> {
+                    val specs by quickActionsEditor.currentSpecs.collectAsStateWithLifecycle()
+                    EdithEditLanding(
+                        quickActionsGridViewModel = viewModel.quickActionsGridViewModel,
+                        quickActionsSpecs = specs,
+                        qsTiles = viewModel.containerViewModel.tileGridViewModel.tileViewModels,
+                        onEditQuickActions = {
+                            quickActionsEditor.openZone(EditZone.QuickActions)
+                        },
+                        onEditQsTiles = { quickActionsEditor.openZone(EditZone.QsTiles) },
+                        onReset = { quickActionsEditor.showResetDialog() },
+                        onStopEditing = stopEditing,
+                        modifier = editModifier,
+                        edithColorEnabled =
+                            viewModel.containerViewModel.edithTileStyle.enabled &&
+                                viewModel.containerViewModel.edithTileStyle.colorsEnabled,
+                    )
+                }
+            }
+        } else {
+            EditMode(
+                viewModel = viewModel.containerViewModel.editModeViewModel,
+                modifier = editModifier,
+            )
+        }
     }
 
     private fun Modifier.collapseExpandSemanticAction(label: String): Modifier {
@@ -1068,7 +1209,8 @@ object SceneKeys {
         object : ElementMatcher {
             override fun matches(key: ElementKey, content: ContentKey): Boolean {
                 return content == SceneKeys.QuickQuickSettings &&
-                    Elements.TileElementMatcher.matches(key, content)
+                    (Elements.TileElementMatcher.matches(key, content) ||
+                        Elements.QuickActionsElementMatcher.matches(key, content))
             }
         }
 }
@@ -1376,14 +1518,26 @@ private fun ContentScope.MediaObject(
     visible: () -> Boolean,
     location: Media.Location,
     expansion: () -> Float,
+    animateWithExpansion: Boolean,
 ) {
     if (MediaControlsInComposeFlag.isEnabled) {
         Element(
             key = Media.Elements.MediaCarousel,
             modifier =
                 modifier.thenIf(mediaPresentationStyle == MediaPresentationStyle.Compressed) {
-                    Modifier.height {
-                        lerp(Media.COMPRESSED_HEIGHT, Media.DEFAULT_HEIGHT, expansion()).roundToPx()
+                    if (animateWithExpansion) {
+                        // Stock in-row media: the card height is tied to the panel expansion so it
+                        // morphs between the QQS and expanded-QS rows.
+                        Modifier.height {
+                            lerp(Media.COMPRESSED_HEIGHT, Media.DEFAULT_HEIGHT, expansion())
+                                .roundToPx()
+                        }
+                    } else {
+                        // Edith compact media: a static two-row card, deliberately NOT coupled to
+                        // the panel expansion. Coupling the height to `expansion()` while the card
+                        // sits in the QQS `Column` (own row) made the panel height change with the
+                        // drag and fight the collapse gesture.
+                        Modifier.staticHeight(Media.COMPRESSED_HEIGHT)
                     }
                 },
         ) {
@@ -1396,6 +1550,7 @@ private fun ContentScope.MediaObject(
                 visible = visible,
                 location = location,
                 expansion = expansion,
+                animateWithExpansion = animateWithExpansion,
             )
         }
     } else {
@@ -1420,6 +1575,7 @@ private fun ContentScope.MediaObject(
 @Composable
 @VisibleForTesting
 fun QuickQuickSettingsLayout(
+    quickActions: @Composable () -> Unit,
     tiles: @Composable () -> Unit,
     media: @Composable () -> Unit,
     mediaInRow: Boolean,
@@ -1429,11 +1585,19 @@ fun QuickQuickSettingsLayout(
             horizontalArrangement = spacedBy(QuickSettingsShade.Dimensions.HorizontalPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.weight(1f)) { tiles() }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement =
+                    spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical)),
+            ) {
+                quickActions()
+                tiles()
+            }
             Box(modifier = Modifier.weight(1f)) { media() }
         }
     } else {
         Column(verticalArrangement = spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical))) {
+            quickActions()
             tiles()
             media()
         }
@@ -1444,7 +1608,9 @@ fun QuickQuickSettingsLayout(
 @Composable
 @VisibleForTesting
 fun QuickSettingsLayout(
+    quickActions: @Composable () -> Unit,
     brightness: @Composable () -> Unit,
+    volume: @Composable () -> Unit,
     tiles: @Composable () -> Unit,
     media: @Composable () -> Unit,
     mediaInRow: Boolean,
@@ -1454,7 +1620,9 @@ fun QuickSettingsLayout(
             verticalArrangement = spacedBy(QuickSettingsShade.Dimensions.VerticalPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            quickActions()
             brightness()
+            volume()
             Row(
                 horizontalArrangement = spacedBy(QuickSettingsShade.Dimensions.HorizontalPadding),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1468,7 +1636,9 @@ fun QuickSettingsLayout(
             verticalArrangement = spacedBy(QuickSettingsShade.Dimensions.VerticalPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            quickActions()
             brightness()
+            volume()
             tiles()
             media()
         }

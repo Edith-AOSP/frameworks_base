@@ -197,6 +197,7 @@
     <!-- The buttons in the Quick Settings footer actions.-->
     <item type="id" name="multi_user_switch"/>
     <item type="id" name="pm_lite"/>
+    <item type="id" name="qs_footer_edit"/>
     <item type="id" name="settings_button_container"/>
 
     <!--Keyboard Backlight Dialog -->

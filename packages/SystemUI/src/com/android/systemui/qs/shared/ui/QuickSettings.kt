@@ -40,6 +40,21 @@ object QuickSettings {
 
         val TileElementMatcher = ElementKey.withIdentity { it is TileIdentity }
 
+        /**
+         * Element key for a tile shown in the fixed "Quick Actions" grid.
+         *
+         * Uses a dedicated [QuickActionIdentity] so it never collides with the regular tile grid's
+         * [TileIdentity] keys, even for the same [TileSpec].
+         */
+        fun TileSpec.toQuickActionElementKey() =
+            ElementKey(
+                "quickAction_${spec}",
+                QuickActionIdentity(this),
+                contentPicker = SharedQsTileContentPicker,
+            )
+
+        val QuickActionsElementMatcher = ElementKey.withIdentity { it is QuickActionIdentity }
+
         val QuickQuickSettingsAndMedia = ElementKey("QuickQuickSettingsAndMedia")
         val SplitShadeQuickSettings = ElementKey("SplitShadeQuickSettings")
     }
@@ -88,3 +103,5 @@ object QuickSettings {
 }
 
 private data class TileIdentity(val spec: TileSpec)
+
+private data class QuickActionIdentity(val spec: TileSpec)

@@ -255,6 +255,11 @@ fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifi
                 Modifier.sysuiResTag("multi_user_switch"),
             )
             IconButton(
+                { viewModel.editMode },
+                useModifierBasedExpandable,
+                Modifier.sysuiResTag("qs_footer_edit_button"),
+            )
+            IconButton(
                 { settings },
                 useModifierBasedExpandable,
                 Modifier.sysuiResTag("settings_button_container"),
@@ -651,6 +656,8 @@ private fun buttonColorsForModel(footerAction: FooterActionsButtonViewModel): Bu
             is FooterActionsButtonViewModel.PowerActionViewModel ->
                 FooterActionsDefaults.activeButtonColors()
             is FooterActionsButtonViewModel.SettingsActionViewModel ->
+                FooterActionsDefaults.inactiveButtonColors()
+            is FooterActionsButtonViewModel.EditModeActionViewModel ->
                 FooterActionsDefaults.inactiveButtonColors()
             is FooterActionsButtonViewModel.UserSwitcherViewModel ->
                 FooterActionsDefaults.userSwitcherButtonColors()

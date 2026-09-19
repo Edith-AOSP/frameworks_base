@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import com.android.systemui.lifecycle.HydratedActivatable
 import com.android.systemui.media.controls.ui.controller.MediaLocation
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
+import com.android.systemui.qs.edith.EdithQsStyleInteractor
 import com.android.systemui.qs.panels.domain.interactor.LargeTileSpanInteractor
 import com.android.systemui.qs.panels.domain.interactor.QSColumnsInteractor
 import dagger.assisted.Assisted
@@ -31,9 +32,9 @@ import kotlinx.coroutines.launch
 
 /**
  * View model for the number of columns that should be shown in a QS grid.
- * * Create it with a [MediaLocation] to halve the number of columns when media should show in a row
- *   with the tiles.
- * * Create it with a `null` [MediaLocation] to ignore media visibility (useful for edit mode).
+ *
+ * When the Edith QS style is enabled, every tile is forced to 1x1 (see [largeSpan]); otherwise the
+ * number of columns and large-tile span are resource-driven.
  */
 class QSColumnsViewModel
 @AssistedInject
@@ -41,12 +42,17 @@ constructor(
     interactor: QSColumnsInteractor,
     mediaInRowInLandscapeViewModelFactory: MediaInRowInLandscapeViewModel.Factory,
     private val largeTileSpanInteractor: LargeTileSpanInteractor,
+    edithQsStyleInteractor: EdithQsStyleInteractor,
     @Assisted @MediaLocation mediaLocation: Int?,
     @Assisted mediaUiBehavior: MediaUiBehavior?,
 ) : HydratedActivatable() {
 
+    private val edithStyleEnabled by edithQsStyleInteractor.isEnabled.hydratedStateOf()
+
     val columns by derivedStateOf {
-        if (mediaInRowInLandscapeViewModel?.shouldMediaShowInRow == true) {
+        if (edithStyleEnabled) {
+            EDITH_COLUMNS
+        } else if (mediaInRowInLandscapeViewModel?.shouldMediaShowInRow == true) {
             columnsWithoutMedia / 2
         } else {
             columnsWithoutMedia
@@ -63,7 +69,10 @@ constructor(
 
     val largeSpan: Int
         get() =
-            if (useExtraLargeTiles) {
+            if (edithStyleEnabled) {
+                // Edith QS style: no large (span > 1) tiles, every tile is 1x1.
+                1
+            } else if (useExtraLargeTiles) {
                 if (columns > maxSpan) columns / 2 else columns
             } else {
                 largeTileSpanInteractor.defaultTileMaxWidth
@@ -87,5 +96,10 @@ constructor(
         fun create(mediaLocation: Int?, mediaUiBehavior: MediaUiBehavior?): QSColumnsViewModel
 
         fun createWithoutMediaTracking() = create(null, null)
+    }
+
+    companion object {
+        /** Number of columns for the Edith QS style (gives 5x2 = 10 tiles per page). */
+        const val EDITH_COLUMNS = 5
     }
 }
