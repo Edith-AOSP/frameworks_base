@@ -100,7 +100,13 @@ class EdithClockFrauncesProvider : ClockProviderPlugin {
 
         val fontAxes = FONT_AXES.merge(settings.axes)
         val presetConfig =
-            AxisPresetConfig(groups = listOf(buildPresetGroup()))
+            AxisPresetConfig(
+                    groups =
+                        listOf(
+                            buildPresetGroup(isRounded = true),
+                            buildPresetGroup(isRounded = false),
+                        )
+                )
                 .let { cfg -> cfg.copy(current = cfg.findStyle(ClockAxisStyle(fontAxes))) }
         val thumbnail = pluginCtx.resources.getDrawable(R.drawable.edith_clock_thumbnail, null)
 
@@ -115,13 +121,17 @@ class EdithClockFrauncesProvider : ClockProviderPlugin {
         )
     }
 
-    private fun buildPresetGroup(): AxisPresetConfig.Group {
+    private fun buildPresetGroup(isRounded: Boolean): AxisPresetConfig.Group {
+        val soft = if (isRounded) SOFT_AXIS.minValue else SOFT_AXIS.maxValue
+        val wonk = if (isRounded) WONK_AXIS.maxValue else WONK_AXIS.minValue
         return AxisPresetConfig.Group(
             presets =
                 PRESET_AXES.map { (opsz, wght) ->
                     ClockAxisStyle {
                         put(OPTICAL_SIZE_AXIS, opsz)
                         put(WEIGHT_AXIS, wght)
+                        put(SOFT_AXIS, soft)
+                        put(WONK_AXIS, wonk)
                     }
                 },
             icon = pluginCtx.resources.getDrawable(R.drawable.edith_clock_thumbnail, null),
@@ -151,14 +161,25 @@ class EdithClockFrauncesProvider : ClockProviderPlugin {
                 animationStep = 10f,
             )
 
-        private val PRESET_AXES =
-            listOf(
-                9f to 400f,
-                36f to 500f,
-                72f to 600f,
-                108f to 700f,
-                144f to 900f,
+        private val SOFT_AXIS =
+            AxisDefinition(
+                tag = "SOFT",
+                minValue = 0f,
+                defaultValue = 0f,
+                maxValue = 100f,
+                animationStep = 1f,
             )
+        private val WONK_AXIS =
+            AxisDefinition(
+                tag = "WONK",
+                minValue = 0f,
+                defaultValue = 1f,
+                maxValue = 1f,
+                animationStep = 1f,
+            )
+
+        private val PRESET_AXES =
+            listOf(9f to 400f, 36f to 500f, 72f to 600f, 108f to 700f, 144f to 900f)
 
         private val FONT_AXES =
             listOf(
@@ -173,6 +194,18 @@ class EdithClockFrauncesProvider : ClockProviderPlugin {
                     currentValue = OPTICAL_SIZE_AXIS.defaultValue,
                     name = "Width",
                     description = "Glyph width (optical size)",
+                ),
+                SOFT_AXIS.toClockAxis(
+                    type = AxisType.Boolean,
+                    currentValue = SOFT_AXIS.defaultValue,
+                    name = "Soft",
+                    description = "Rounded glyph terminals",
+                ),
+                WONK_AXIS.toClockAxis(
+                    type = AxisType.Boolean,
+                    currentValue = WONK_AXIS.defaultValue,
+                    name = "Wonk",
+                    description = "Rounded glyph alternates",
                 ),
             )
     }
