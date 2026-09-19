@@ -60,6 +60,8 @@ private val KNOWN_PLUGINS: Map<String, List<ClockMetadata>> =
             listOf(ClockMetadata("DIGITAL_CLOCK_CALLIGRAPHY")),
         "com.android.systemui.clocks.edithclockfraunces" to
             listOf(ClockMetadata("EDITH_CLOCK_FRAUNCES")),
+        "com.android.systemui.clocks.edithclockliterata" to
+            listOf(ClockMetadata("EDITH_CLOCK_LITERATA")),
         "com.android.systemui.clocks.flex" to listOf(ClockMetadata("DIGITAL_CLOCK_FLEX")),
         "com.android.systemui.clocks.growth" to listOf(ClockMetadata("DIGITAL_CLOCK_GROWTH")),
         "com.android.systemui.clocks.handwritten" to
