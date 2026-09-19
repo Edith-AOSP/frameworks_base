@@ -369,6 +369,10 @@ abstract class DigitalClockTextView(private val clockCtx: ClockContext) :
         super.onLayout(changed, left, top, right, bottom)
         logger.onLayout(changed, left, top, right, bottom)
         layoutBounds = VRectF(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+        if (changed && parent !is IDigitalClockViewGroup) {
+            drawnProgress = null
+            onViewBoundsChanged?.let { it(getInterpolatedTextBounds(1f)) }
+        }
     }
 
     override fun invalidate() {
