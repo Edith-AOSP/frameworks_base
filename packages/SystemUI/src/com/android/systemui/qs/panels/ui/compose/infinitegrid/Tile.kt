@@ -36,6 +36,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -50,13 +53,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.semantics.Role
@@ -67,6 +73,8 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.util.trace
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.compose.animation.Expandable
@@ -86,10 +94,15 @@ import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.haptics.msdl.qs.TileHapticsViewModel
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.qs.flags.QsDetailedView
+import com.android.systemui.qs.edith.EdithTileColorOverride
+import com.android.systemui.qs.edith.EdithTileSwatches
+import com.android.systemui.qs.edith.QuickActionsTileOverride
+import com.android.systemui.qs.edith.QuickActionsTileSwatches
 import com.android.systemui.qs.panels.ui.compose.BounceableInfo
 import com.android.systemui.qs.panels.ui.compose.Tooltip
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.ActiveIconCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.ActiveTileCornerRadius
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.EdithInactiveTileAlpha
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.InactiveIconCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.InactiveTileCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.TileHeight
@@ -148,6 +161,12 @@ fun ContentScope.Tile(
     requestToggleTextFeedback: (TileSpec) -> Unit = {},
     detailsViewModel: DetailsViewModel?,
     enableRevealEffect: Boolean = false,
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
+    edithSquareSize: Dp? = null,
+    edithTileColorOverride: EdithTileColorOverride? = null,
+    edithQuickActionsTile: Boolean = false,
+    edithQuickActionsOverride: QuickActionsTileOverride? = null,
 ) {
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
@@ -169,16 +188,52 @@ fun ContentScope.Tile(
                 tile.state.collect { value = it.toIconProvider() }
             }
 
-        val colors = TileDefaults.getColorForState(uiState, iconOnly)
+        val colors =
+            when {
+                // Quick Actions tiles keep stock colors unless the tuner overrides them; they're
+                // not affected by the QS color scheme toggle.
+                edithTileStyle && edithQuickActionsTile ->
+                    TileDefaults.edithQuickActionsTileColors(
+                        uiState = uiState,
+                        iconOnly = iconOnly,
+                        override = edithQuickActionsOverride,
+                    )
+                // The main grid only goes tertiary when the color scheme toggle is on.
+                edithTileStyle && edithColorEnabled ->
+                    TileDefaults.edithTertiaryTileColors(uiState.visualState, edithTileColorOverride)
+                else -> TileDefaults.getColorForState(uiState, iconOnly)
+            }
         val hapticsViewModel: TileHapticsViewModel =
             rememberViewModel(traceName = "TileHapticsViewModel") {
                 tileHapticsViewModelFactory.create(tile)
             }
 
-        // TODO(b/361789146): Draw the shapes instead of clipping
-        val tileShape by TileDefaults.animateTileShapeAsState(uiState)
-        val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
         val isDualTarget = uiState.handlesToggleClick
+
+        // TODO(b/361789146): Draw the shapes instead of clipping
+        // Edith QS style: square tiles, a perfect circle when inactive and a squircle when active.
+        // The dual-target (dual-state) tile has its own outer radius (16dp), overridable from the
+        // Quick Actions shape tuner.
+        val tileShape by
+            if (edithTileStyle) {
+                val dualTargetOuterRadius =
+                    edithQuickActionsOverride?.outerCornerRadiusDp.takeIf { isDualTarget }
+                remember(uiState.visualState, isDualTarget, dualTargetOuterRadius) {
+                    mutableStateOf(
+                        when {
+                            dualTargetOuterRadius != null ->
+                                RoundedCornerShape(dualTargetOuterRadius.dp)
+                            isDualTarget -> RoundedCornerShape(EdithDualTargetOuterCornerRadius)
+                            uiState.visualState == STATE_ACTIVE ->
+                                RoundedCornerShape(EdithActiveCornerRadius)
+                            else -> RoundedCornerShape(percent = 50)
+                        }
+                    )
+                }
+            } else {
+                TileDefaults.animateTileShapeAsState(uiState)
+            }
+        val animatedColor by animateColorAsState(colors.background, label = "QSTileBackgroundColor")
         val hasLongClickEffect = uiState.hasLongClickEffect
         val interactionSource = remember { MutableInteractionSource() }
 
@@ -227,6 +282,16 @@ fun ContentScope.Tile(
                 hapticsViewModel = hapticsViewModel.takeIf { hasLongClickEffect },
                 modifier =
                     modifier
+                        .then(
+                            // Fixed square height (Edith) applied outermost so the tap
+                            // squish/bounce animation cannot change the grid height (which moves
+                            // the PagerDots).
+                            if (edithSquareSize != null) {
+                                Modifier.height(edithSquareSize)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .then(surfaceRevealModifier)
                         .borderOnFocus(
                             color = MaterialTheme.colorScheme.secondary,
@@ -310,19 +375,65 @@ fun ContentScope.Tile(
                     iconOnly = iconOnly,
                     isDualTarget = isDualTarget,
                     modifier = contentRevealModifier,
+                    // The Edith square treatment only applies to the icon-only tiles of the main
+                    // QS grid. Large (icon + label) tiles — including the Quick Actions tiles —
+                    // keep the standard (short, wide) tile height instead of being forced square.
+                    square = edithTileStyle && iconOnly,
+                    fixedSquareSize = edithSquareSize,
                 ) {
                     val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
                     if (iconOnly) {
-                        SmallTileContent(
-                            iconProvider = iconProvider,
-                            color = colors.icon,
-                            modifier =
-                                Modifier.align(Alignment.Center).bounceScale {
-                                    currentBounceableInfo.bounceable.iconBounceScale
-                                },
-                        )
+                        // Edith square tiles are smaller than the standard tile, so scale the icon
+                        // to the tile's actual size.
+                        if (edithTileStyle) {
+                            BoxWithConstraints(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val iconSize = min(maxWidth, maxHeight) * EdithIconRatio
+                                SmallTileContent(
+                                    iconProvider = iconProvider,
+                                    color = colors.icon,
+                                    size = { iconSize },
+                                    modifier =
+                                        Modifier.bounceScale {
+                                            currentBounceableInfo.bounceable.iconBounceScale
+                                        },
+                                )
+                            }
+                        } else {
+                            SmallTileContent(
+                                iconProvider = iconProvider,
+                                color = colors.icon,
+                                modifier =
+                                    Modifier.align(Alignment.Center).bounceScale {
+                                        currentBounceableInfo.bounceable.iconBounceScale
+                                    },
+                            )
+                        }
                     } else {
-                        val iconShape by TileDefaults.animateIconShapeAsState(uiState)
+                        // Dual-target inner box shape. In the Edith style it defaults to 10dp and
+                        // can be overridden from the Quick Actions shape tuner; otherwise the stock
+                        // active/inactive shape is used. All are computed unconditionally (the
+                        // override can toggle live) and one is then selected.
+                        val stockIconShape = TileDefaults.animateIconShapeAsState(uiState)
+                        val innerRadiusOverride =
+                            edithQuickActionsOverride?.innerCornerRadiusDp.takeIf {
+                                edithTileStyle && isDualTarget
+                            }
+                        val overrideIconShape =
+                            remember(innerRadiusOverride) {
+                                mutableStateOf(
+                                    innerRadiusOverride?.let { RoundedCornerShape(it.dp) }
+                                )
+                            }
+                        val iconShape =
+                            overrideIconShape.value
+                                ?: if (edithTileStyle && isDualTarget) {
+                                    RoundedCornerShape(EdithDualTargetInnerCornerRadius)
+                                } else {
+                                    stockIconShape.value
+                                }
                         val secondaryClick: (() -> Unit)? =
                             {
                                     hapticsViewModel.setTileInteractionState(
@@ -344,6 +455,18 @@ fun ContentScope.Tile(
                             squishiness = squishiness,
                             isVisible = isVisible,
                             textScale = { currentBounceableInfo.bounceable.textBounceScale },
+                            // Only when the QA colors are overridden do the tile and inner box share
+                            // the same color; paint the box with the glyph color so it stays visible.
+                            innerBoxColor =
+                                if (
+                                    edithTileStyle &&
+                                        isDualTarget &&
+                                        edithQuickActionsOverride?.hasAnyColor == true
+                                ) {
+                                    colors.icon.copy(alpha = EdithInnerBoxAlpha)
+                                } else {
+                                    null
+                                },
                             modifier =
                                 Modifier.largeTilePadding(
                                     isDualTarget = uiState.handlesSettingsClick
@@ -389,13 +512,23 @@ fun TileContainer(
     isDualTarget: Boolean,
     interactionSource: MutableInteractionSource?,
     modifier: Modifier = Modifier,
+    square: Boolean = false,
+    fixedSquareSize: Dp? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     Box(
         modifier =
             modifier
-                .height(TileHeight)
-                .fillMaxWidth()
+                .then(
+                    when {
+                        // Fixed square size (Edith): a fixed height unaffected by the bounce
+                        // animation that changes the tile's width on tap.
+                        fixedSquareSize != null ->
+                            Modifier.height(fixedSquareSize).fillMaxWidth()
+                        square -> Modifier.fillMaxWidth().aspectRatio(1f)
+                        else -> Modifier.height(TileHeight).fillMaxWidth()
+                    }
+                )
                 .tileCombinedClickable(
                     onClick = onClick ?: {},
                     onLongClick = onLongClick,
@@ -414,22 +547,56 @@ fun SmallStaticTile(
     uiState: TileUiState,
     iconProvider: IconProvider,
     modifier: Modifier = Modifier,
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
+    edithTileColorOverride: EdithTileColorOverride? = null,
     onClick: () -> Unit = {},
 ) {
-    val colors = TileDefaults.getColorForState(uiState = uiState, iconOnly = true)
+    val colors =
+        if (edithTileStyle && edithColorEnabled) {
+            TileDefaults.edithTertiaryTileColors(uiState.visualState, edithTileColorOverride)
+        } else {
+            TileDefaults.getColorForState(uiState = uiState, iconOnly = true)
+        }
+    val shape =
+        if (edithTileStyle) {
+            RoundedCornerShape(percent = 50)
+        } else {
+            TileDefaults.animateTileShapeAsState(uiState).value
+        }
 
     Box(
         modifier
-            .clip(TileDefaults.animateTileShapeAsState(uiState).value)
+            .clip(shape)
             .background(colors.background)
-            .size(TileHeight)
+            .then(
+                if (edithTileStyle) {
+                    Modifier.fillMaxWidth().aspectRatio(1f)
+                } else {
+                    Modifier.size(TileHeight)
+                }
+            )
             .clickable(onClick = onClick)
     ) {
-        SmallTileContent(
-            iconProvider = { getTileIcon(icon = iconProvider) },
-            color = colors.icon,
-            modifier = Modifier.align(Alignment.Center),
-        )
+        if (edithTileStyle) {
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                val iconSize = min(maxWidth, maxHeight) * EdithIconRatio
+                SmallTileContent(
+                    iconProvider = { getTileIcon(icon = iconProvider) },
+                    color = colors.icon,
+                    size = { iconSize },
+                )
+            }
+        } else {
+            SmallTileContent(
+                iconProvider = { getTileIcon(icon = iconProvider) },
+                color = colors.icon,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
     }
 }
 
@@ -438,13 +605,16 @@ fun LargeStaticTile(
     uiState: TileUiState,
     iconProvider: IconProvider,
     modifier: Modifier = Modifier,
+    shape: Shape? = null,
+    dualTarget: Boolean = false,
+    innerShape: RoundedCornerShape = RoundedCornerShape(percent = 50),
     onClick: () -> Unit = {},
 ) {
     val colors = TileDefaults.getColorForState(uiState = uiState, iconOnly = false)
 
     Box(
         modifier
-            .clip(TileDefaults.animateTileShapeAsState(uiState).value)
+            .clip(shape ?: TileDefaults.animateTileShapeAsState(uiState).value)
             .background(colors.background)
             .height(TileHeight)
             .clickable(onClick = onClick)
@@ -457,6 +627,9 @@ fun LargeStaticTile(
             sideDrawable = null,
             colors = colors,
             squishiness = { 1f },
+            // Preview of a dual-target tile: show the inner box without any interaction.
+            showDualTargetBox = dualTarget,
+            iconShape = if (dualTarget) innerShape else RoundedCornerShape(percent = 50),
         )
     }
 }
@@ -525,7 +698,134 @@ object TileMotionTestKeys {
     val Squishness = MotionTestValueKey<Float>("tile_squishiness")
 }
 
+/**
+ * Fraction of the (square) Edith tile occupied by the icon. The Edith tiles are smaller than the
+ * standard tile, so the icon scales with the tile size instead of using a fixed dimension.
+ */
+private const val EdithIconRatio = 0.38f
+
+/** Corner radius of the active (squircle) Edith tile. */
+private val EdithActiveCornerRadius = 16.dp
+
+/** Default corner radius of the Quick Actions dual-state (dual-target) outer box. */
+private val EdithDualTargetOuterCornerRadius = 16.dp
+
+/** Default corner radius of the Quick Actions dual-state (dual-target) inner toggle-target box. */
+private val EdithDualTargetInnerCornerRadius = 10.dp
+
+/** Tint alpha for the Quick Actions dual-target inner box when the tile colors are overridden. */
+private const val EdithInnerBoxAlpha = 0.24f
+
 private object TileDefaults {
+    /**
+     * Default Edith QS tertiary tile colors, set per-theme via the `edith_qs_tile_*` color
+     * resources (different accent3 tones in `values`/`values-night`):
+     *
+     *  - Dark:  active bg=a3_200, active icon=a3_800, inactive bg=a3_800, inactive icon=a3_100
+     *  - Light: active bg=a3_600, active icon=a3_50,  inactive bg=a3_10,  inactive icon=a3_700
+     *
+     * They alias `@android:color/system_accent3_*`, which are dynamic (theme-aware), so the tiles
+     * follow palette changes (wallpaper / ThemePicker). The inactive background is applied with
+     * [EdithInactiveTileAlpha], matching AOSP's surfaceEffect1, so the wallpaper shows through.
+     * Unavailable tiles use the stock dimmed look.
+     *
+     * @param edithTileColorOverride optional per-slot color overrides from the (debug) color tuner
+     *   in Settings; unset slots fall back to the resource defaults above.
+     */
+    @Composable
+    fun edithTertiaryTileColors(
+        visualState: Int,
+        edithTileColorOverride: EdithTileColorOverride? = null,
+    ): TileColors {
+        if (visualState != STATE_INACTIVE && visualState != STATE_ACTIVE) {
+            // Unavailable (e.g. STATE_UNAVAILABLE): a dimmed neutral surface with a still-visible
+            // glyph, matching the default unavailable tile look.
+            return unavailableTileColors()
+        }
+        val context = LocalContext.current
+        // Read the configuration (assetsSeq matches PlatformTheme) so the color resolution below is
+        // re-run when the theme changes, e.g. after picking new colors in ThemePicker. Without this,
+        // a set override would keep resolving to the previous seed's color.
+        val assetsSeq = LocalConfiguration.current.assetsSeq
+        val active = visualState == STATE_ACTIVE
+        val inactiveAlpha = edithTileColorOverride?.inactiveAlpha ?: EdithInactiveTileAlpha
+
+        val defaultBgRes =
+            if (active) R.color.edith_qs_tile_active_bg else R.color.edith_qs_tile_inactive_bg
+        val defaultIconRes =
+            if (active) R.color.edith_qs_tile_active_icon else R.color.edith_qs_tile_inactive_icon
+
+        // The override holds a swatch tag; resolve it against the current theme so the tile still
+        // follows palette changes (wallpaper / ThemePicker). Keyed on assetsSeq so the resolved
+        // colors are recomputed when the theme changes.
+        val bgTag =
+            if (active) edithTileColorOverride?.activeBg else edithTileColorOverride?.inactiveBg
+        val iconTag =
+            if (active) edithTileColorOverride?.activeFg else edithTileColorOverride?.inactiveFg
+        val resolved =
+            remember(context, assetsSeq, bgTag, iconTag, defaultBgRes, defaultIconRes) {
+                val bgArgb =
+                    EdithTileSwatches.resolve(context, bgTag) ?: context.getColor(defaultBgRes)
+                val fgArgb =
+                    EdithTileSwatches.resolve(context, iconTag) ?: context.getColor(defaultIconRes)
+                bgArgb to fgArgb
+            }
+        val bg = Color(resolved.first).copy(alpha = if (active) 1f else inactiveAlpha)
+        val fg = Color(resolved.second)
+        return TileColors(
+            background = bg,
+            iconBackground = bg,
+            label = fg,
+            secondaryLabel = fg,
+            icon = fg,
+        )
+    }
+
+    /**
+     * Colors for the Quick Actions tiles: the stock look, with any tuner overrides layered on top
+     * (resolved through [QuickActionsTileSwatches]). Slots without an override keep their stock
+     * color.
+     */
+    @Composable
+    fun edithQuickActionsTileColors(
+        uiState: TileUiState,
+        iconOnly: Boolean,
+        override: QuickActionsTileOverride? = null,
+    ): TileColors {
+        val stock = getColorForState(uiState, iconOnly)
+        if (override == null || !override.hasAnyColor) {
+            return stock
+        }
+        if (uiState.visualState != STATE_INACTIVE && uiState.visualState != STATE_ACTIVE) {
+            return stock
+        }
+        val context = LocalContext.current
+        // Keyed on assetsSeq so the resolved colors are recomputed when the theme changes.
+        val assetsSeq = LocalConfiguration.current.assetsSeq
+        val active = uiState.visualState == STATE_ACTIVE
+        val inactiveAlpha = override.inactiveAlpha ?: EdithInactiveTileAlpha
+
+        val bgTag = if (active) override.activeBg else override.inactiveBg
+        val iconTag = if (active) override.activeFg else override.inactiveFg
+        val resolved =
+            remember(context, assetsSeq, bgTag, iconTag) {
+                QuickActionsTileSwatches.resolve(context, bgTag) to
+                    QuickActionsTileSwatches.resolve(context, iconTag)
+            }
+        // Anything the tuner didn't set keeps its stock color.
+        val background =
+            resolved.first?.let { Color(it).copy(alpha = if (active) 1f else inactiveAlpha) }
+                ?: stock.background
+        val fg = resolved.second?.let { Color(it) }
+        return TileColors(
+            background = background,
+            iconBackground = background,
+            label = fg ?: stock.label,
+            secondaryLabel = fg ?: stock.secondaryLabel,
+            icon = fg ?: stock.icon,
+        )
+    }
+
     /** An active tile uses the active color as background */
     @Composable
     @ReadOnlyComposable

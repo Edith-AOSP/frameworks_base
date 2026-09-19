@@ -30,6 +30,7 @@ import com.android.systemui.Flags.hsuQsChanges
 import com.android.systemui.animation.Expandable
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
+import com.android.systemui.qs.panels.ui.viewmodel.EditModeViewModel
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.globalactions.GlobalActionsDialogLite
 import com.android.systemui.plugins.ActivityStarter
@@ -80,6 +81,9 @@ class FooterActionsViewModel(
 
     /** The model for the settings button. */
     val settings: Flow<FooterActionsButtonViewModel?>,
+
+    /** The model for the "edit tiles" button (opens QS edit mode). */
+    val editMode: FooterActionsButtonViewModel?,
 
     /** The model for the power button. */
     val power: FooterActionsButtonViewModel?,
@@ -133,7 +137,8 @@ class FooterActionsViewModel(
         private val textFeedbackInteractor: TextFeedbackInteractor,
         private val selectedUserInteractor: SelectedUserInteractor,
         @Named(PM_LITE_ENABLED) private val showPowerButton: Boolean,
-        private val keyguardStateController: KeyguardStateController
+        private val keyguardStateController: KeyguardStateController,
+        private val editModeViewModel: EditModeViewModel,
     ) {
         /** Create a [FooterActionsViewModel] bound to the lifecycle of [lifecycleOwner]. */
         fun create(lifecycleOwner: LifecycleOwner): FooterActionsViewModel {
@@ -163,6 +168,7 @@ class FooterActionsViewModel(
                 showPowerButton,
                 selectedUserInteractor,
                 keyguardStateController,
+                editModeViewModel,
             )
         }
 
@@ -190,6 +196,7 @@ class FooterActionsViewModel(
                 showPowerButton,
                 selectedUserInteractor,
                 keyguardStateController,
+                editModeViewModel,
             )
         }
     }
@@ -205,6 +212,7 @@ fun createFooterActionsViewModel(
     showPowerButton: Boolean,
     selectedUserInteractor: SelectedUserInteractor,
     keyguardStateController: KeyguardStateController,
+    editModeViewModel: EditModeViewModel,
 ): FooterActionsViewModel {
     suspend fun observeDeviceMonitoringDialogRequests(quickSettingsContext: Context) {
         footerActionsInteractor.deviceMonitoringDialogRequests.collect {
@@ -333,6 +341,17 @@ fun createFooterActionsViewModel(
         foregroundServices = foregroundServices,
         userSwitcher = userSwitcher,
         settings = settings,
+        editMode =
+            FooterActionsButtonViewModel.EditModeActionViewModel(
+                icon =
+                    Icon.Resource(
+                        R.drawable.ic_qs_footer_edit,
+                        ContentDescription.Resource(
+                            R.string.accessibility_quick_settings_edit_tiles
+                        ),
+                    ),
+                onClick = { editModeViewModel.startEditing() },
+            ),
         power = power,
         observeDeviceMonitoringDialogRequests = ::observeDeviceMonitoringDialogRequests,
         textFeedback = textFeedback,

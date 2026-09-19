@@ -295,4 +295,10 @@
         <item>#1AA64A</item>
         <item>#D37B00</item>
     </array>
+
+    <!-- Edith QS tertiary tile colors (light). See values-night for the dark mapping. -->
+    <color name="edith_qs_tile_active_bg">@android:color/system_accent3_600</color>
+    <color name="edith_qs_tile_active_icon">@android:color/system_accent3_50</color>
+    <color name="edith_qs_tile_inactive_bg">@android:color/system_accent3_10</color>
+    <color name="edith_qs_tile_inactive_icon">@android:color/system_accent3_700</color>
 </resources>

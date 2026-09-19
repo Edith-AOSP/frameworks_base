@@ -130,8 +130,12 @@ fun LargeTileContent(
     textScale: () -> Float = { 1f },
     toggleClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
+    innerBoxColor: Color? = null,
+    showDualTargetBox: Boolean = false,
 ) {
     val isDualTarget = toggleClick != null
+    // Draw the inner box (no interaction) for non-interactive previews of a dual-target tile.
+    val drawDualTargetBox = isDualTarget || showDualTargetBox
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = tileHorizontalArrangement(),
@@ -139,36 +143,41 @@ fun LargeTileContent(
     ) {
         // Icon
         val longPressLabel = longPressLabelSettings().takeIf { onLongClick != null }
+        // The Edith Quick Actions dual-target tile draws its inner box with a derived color (the
+        // glyph color at low alpha) so the box is visible on top of the same-colored tile.
+        val targetBackground = innerBoxColor ?: colors.iconBackground
         val animatedBackgroundColor by
-            animateColorAsState(colors.iconBackground, label = "QSTileDualTargetBackgroundColor")
+            animateColorAsState(targetBackground, label = "QSTileDualTargetBackgroundColor")
         val focusBorderColor = MaterialTheme.colorScheme.secondary
         Box(
             modifier =
-                Modifier.size(CommonTileDefaults.ToggleTargetSize).thenIf(isDualTarget) {
-                    Modifier.borderOnFocus(color = focusBorderColor, iconShape.topEnd)
-                        .clip(iconShape)
-                        .drawBehind { drawRect(animatedBackgroundColor) }
-                        // apply the squish effect after the bg is drawn
-                        .verticalSquish(squishiness)
-                        .combinedClickable(
-                            onClick = toggleClick!!,
-                            onLongClick = onLongClick,
-                            onLongClickLabel = longPressLabel,
-                            hapticFeedbackEnabled = false, // Haptics handled separately
-                        )
-                        .thenIf(accessibilityUiState != null) {
-                            Modifier.semantics {
-                                    accessibilityUiState as AccessibilityUiState
-                                    contentDescription = accessibilityUiState.contentDescription
-                                    stateDescription = accessibilityUiState.stateDescription
-                                    accessibilityUiState.toggleableState?.let {
-                                        toggleableState = it
+                Modifier.size(CommonTileDefaults.ToggleTargetSize)
+                    .thenIf(drawDualTargetBox) {
+                        Modifier.clip(iconShape).drawBehind { drawRect(animatedBackgroundColor) }
+                    }
+                    .thenIf(isDualTarget) {
+                        Modifier.borderOnFocus(color = focusBorderColor, iconShape.topEnd)
+                            // apply the squish effect after the bg is drawn
+                            .verticalSquish(squishiness)
+                            .combinedClickable(
+                                onClick = toggleClick!!,
+                                onLongClick = onLongClick,
+                                onLongClickLabel = longPressLabel,
+                                hapticFeedbackEnabled = false, // Haptics handled separately
+                            )
+                            .thenIf(accessibilityUiState != null) {
+                                Modifier.semantics {
+                                        accessibilityUiState as AccessibilityUiState
+                                        contentDescription = accessibilityUiState.contentDescription
+                                        stateDescription = accessibilityUiState.stateDescription
+                                        accessibilityUiState.toggleableState?.let {
+                                            toggleableState = it
+                                        }
+                                        role = Role.Switch
                                     }
-                                    role = Role.Switch
-                                }
-                                .sysuiResTag(TEST_TAG_TOGGLE)
-                        }
-                }
+                                    .sysuiResTag(TEST_TAG_TOGGLE)
+                            }
+                    }
         ) {
             SmallTileContent(
                 iconProvider = iconProvider,
@@ -489,6 +498,15 @@ object CommonTileDefaults {
     val ChevronSize = 14.dp
     val TileEndPadding = 12.dp
     val TileArrangementPadding = 6.dp
+
+    /** Spacing between tiles for the Edith QS style (more air between the smaller square tiles). */
+    val EdithTileSpacing = 10.dp
+
+    /**
+     * Opacity of the inactive Edith tile background, mirroring AOSP's `surfaceEffect1` (0.54) so the
+     * tile stays semi-transparent instead of a solid color.
+     */
+    const val EdithInactiveTileAlpha = 0.54f
     val TileLabelBlurWidth = 32.dp
     const val TILE_MARQUEE_ITERATIONS = 1
     const val TILE_INITIAL_DELAY_MILLIS = 2000

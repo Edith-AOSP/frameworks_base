@@ -16,6 +16,8 @@
 
 package com.android.systemui.qs.panels.ui.compose.infinitegrid
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.util.fastMap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.ContentScope
@@ -36,9 +39,12 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.grid.ui.compose.VerticalSpannedGrid
 import com.android.systemui.haptics.msdl.qs.TileHapticsViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.qs.edith.EdithQsStyleInteractor
+import com.android.systemui.qs.edith.EdithQsColorInteractor
 import com.android.systemui.qs.panels.shared.model.SizedTileImpl
 import com.android.systemui.qs.panels.ui.compose.EditTileListState
 import com.android.systemui.qs.panels.ui.compose.PaginatableGridLayout
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.EdithTileSpacing
 import com.android.systemui.qs.panels.ui.compose.TileListener
 import com.android.systemui.qs.panels.ui.compose.bounceableInfo
 import com.android.systemui.qs.panels.ui.viewmodel.BounceableTileViewModel
@@ -64,6 +70,8 @@ constructor(
     override val viewModelFactory: InfiniteGridViewModel.Factory,
     private val textFeedbackContentViewModelFactory: TextFeedbackContentViewModel.Factory,
     private val tileHapticsViewModelFactory: TileHapticsViewModel.Factory,
+    private val edithQsStyleInteractor: EdithQsStyleInteractor,
+    private val edithQsColorInteractor: EdithQsColorInteractor,
 ) : PaginatableGridLayout {
 
     @Composable
@@ -79,6 +87,10 @@ constructor(
             }
 
         val context = LocalContext.current
+        val edithStyleEnabled by edithQsStyleInteractor.isEnabled.collectAsStateWithLifecycle()
+        val edithColorEnabled by edithQsColorInteractor.isEnabled.collectAsStateWithLifecycle()
+        val edithTileColorOverride by
+            edithQsColorInteractor.tileColorOverride.collectAsStateWithLifecycle()
         val textFeedbackViewModel =
             rememberViewModel(traceName = "InfiniteGridLayout.TileGrid", key = context) {
                 textFeedbackContentViewModelFactory.create(context)
@@ -100,37 +112,61 @@ constructor(
         val bounceables =
             remember(sizedTiles) { List(sizedTiles.size) { BounceableTileViewModel() } }
         val spans by remember(sizedTiles) { derivedStateOf { sizedTiles.fastMap { it.width } } }
-        VerticalSpannedGrid(
-            columns = columns,
-            columnSpacing = dimensionResource(R.dimen.qs_tile_margin_horizontal),
-            rowSpacing = dimensionResource(R.dimen.qs_tile_margin_vertical),
-            spans = spans,
-            keys = { sizedTiles[it].tile.spec },
-            modifier = modifier,
-        ) { spanIndex, column, isFirstInColumn, isLastInColumn ->
-            val it = sizedTiles[spanIndex]
+        val tileSpacing =
+            if (edithStyleEnabled) {
+                EdithTileSpacing
+            } else {
+                dimensionResource(R.dimen.qs_tile_margin_horizontal)
+            }
 
-            Element(it.tile.spec.toElementKey(), Modifier) {
-                Tile(
-                    tile = it.tile,
-                    iconOnly = iconTilesViewModel.isIconTile(it.tile.spec),
-                    squishiness = { squishiness },
-                    tileHapticsViewModelFactory = tileHapticsViewModelFactory,
-                    coroutineScope = scope,
-                    bounceableInfo =
-                        bounceables.bounceableInfo(
-                            it,
-                            index = spanIndex,
-                            column = column,
-                            columns = columns,
-                            isFirstInRow = isFirstInColumn,
-                            isLastInRow = isLastInColumn,
-                        ),
-                    detailsViewModel = detailsViewModel,
-                    isVisible = listening,
-                    requestToggleTextFeedback = textFeedbackViewModel::requestShowFeedback,
-                    enableRevealEffect = enableRevealEffect,
-                )
+        // The square tile size is derived from the grid geometry so the tile height is fixed and
+        // unaffected by the tap bounce animation (which would otherwise move the PagerDots).
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val edithSquareSize: Dp? =
+                if (edithStyleEnabled) {
+                    (maxWidth - tileSpacing * (columns - 1).coerceAtLeast(0)) /
+                        columns.coerceAtLeast(1)
+                } else {
+                    null
+                }
+            VerticalSpannedGrid(
+                columns = columns,
+                columnSpacing = tileSpacing,
+                rowSpacing = tileSpacing,
+                spans = spans,
+                keys = { sizedTiles[it].tile.spec },
+                modifier = modifier,
+            ) { spanIndex, column, isFirstInColumn, isLastInColumn ->
+                val it = sizedTiles[spanIndex]
+
+                Element(it.tile.spec.toElementKey(), Modifier) {
+                    Tile(
+                        tile = it.tile,
+                        // 1x1 tiles (e.g. the Edith QS style) use the compact icon layout.
+                        iconOnly = it.width == 1,
+                        squishiness = { squishiness },
+                        tileHapticsViewModelFactory = tileHapticsViewModelFactory,
+                        coroutineScope = scope,
+                        bounceableInfo =
+                            bounceables.bounceableInfo(
+                                it,
+                                index = spanIndex,
+                                column = column,
+                                columns = columns,
+                                isFirstInRow = isFirstInColumn,
+                                isLastInRow = isLastInColumn,
+                            ),
+                        detailsViewModel = detailsViewModel,
+                        isVisible = listening,
+                        requestToggleTextFeedback = textFeedbackViewModel::requestShowFeedback,
+                        enableRevealEffect = enableRevealEffect,
+                        edithTileStyle = edithStyleEnabled,
+                        edithColorEnabled = edithStyleEnabled && edithColorEnabled,
+                        edithSquareSize = edithSquareSize,
+                        edithTileColorOverride =
+                            edithTileColorOverride.takeIf { edithStyleEnabled && edithColorEnabled },
+                    )
+                }
             }
         }
 
@@ -164,6 +200,8 @@ constructor(
             }
         val scrollState = rememberScrollState()
         val coroutineScope = rememberCoroutineScope()
+        val edithStyleEnabled by edithQsStyleInteractor.isEnabled.collectAsStateWithLifecycle()
+        val edithColorEnabled by edithQsColorInteractor.isEnabled.collectAsStateWithLifecycle()
         val dialogDelegate =
             rememberViewModel("InfiniteGridLayout.EditTileGrid") {
                 viewModel.resetDialogDelegateFactory.create {
@@ -207,6 +245,8 @@ constructor(
             snapshotViewModel = snapshotViewModel,
             onStopEditing = onStopEditing,
             topBarActions = actions,
+            edithTileStyle = edithStyleEnabled,
+            edithColorEnabled = edithStyleEnabled && edithColorEnabled,
         ) { action ->
             // Opening the dialog doesn't require a snapshot
             if (action != EditAction.ResetGrid) {

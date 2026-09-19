@@ -3126,6 +3126,41 @@
     <!-- Title for QS Edit mode screen [CHAR LIMIT=30] -->
     <string name="qs_edit_tiles">Edit tiles</string>
 
+    <!-- Title for the Quick Actions editing screen [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_quick_actions_title">Quick Actions</string>
+
+    <!-- Subtitle on the QS edit landing screen [CHAR LIMIT=60] -->
+    <string name="quick_settings_edit_subtitle">Customize your quick settings</string>
+
+    <!-- Reset button on the QS edit landing screen [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_reset">Reset</string>
+
+    <!-- Back button on the QS edit screens [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_back">Back</string>
+
+    <!-- Undo button on the QS edit screens [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_undo">Undo</string>
+
+    <!-- Content description for the footer button that opens QS edit mode [CHAR LIMIT=50] -->
+    <string name="accessibility_quick_settings_edit_tiles">Edit tiles</string>
+
+    <!-- Done button on the QS edit screens [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_done">Done</string>
+
+    <!-- Title for the QS tiles zone on the edit landing screen [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_qs_tiles_title">Quick Settings tiles</string>
+    <!-- Title for the toggles & shortcuts zone on the edit landing screen [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_toggles_shortcuts_title">Toggles &amp; Shortcuts</string>
+
+    <!-- Button to open the tile picker for Quick Actions [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_quick_actions_add">Add tile</string>
+
+    <!-- Accessibility label for removing a Quick Actions tile [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_quick_actions_remove">Remove tile</string>
+
+    <!-- Placeholder shown in an empty Quick Actions slot [CHAR LIMIT=30] -->
+    <string name="quick_settings_edit_quick_actions_empty">Empty</string>
+
     <!-- Tooltip for the edit mode button indicating that tiles can be resized [CHAR LIMIT=60] -->
     <string name="qs_edit_mode_tooltip">Resize Quick Settings tiles</string>
 

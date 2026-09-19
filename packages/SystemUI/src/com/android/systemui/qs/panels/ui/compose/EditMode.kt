@@ -19,20 +19,21 @@ package com.android.systemui.qs.panels.ui.compose
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.systemui.qs.panels.ui.viewmodel.EditModeViewModel
 
 @Composable
-fun EditMode(viewModel: EditModeViewModel, modifier: Modifier = Modifier) {
+fun EditMode(
+    viewModel: EditModeViewModel,
+    modifier: Modifier = Modifier,
+    onStopEditing: () -> Unit = { viewModel.stopEditing() },
+) {
     val gridLayout by viewModel.gridLayout.collectAsStateWithLifecycle()
     val tiles by viewModel.tiles.collectAsStateWithLifecycle(emptyList())
 
-    BackHandler { viewModel.stopEditing() }
-
-    DisposableEffect(Unit) { onDispose { viewModel.stopEditing() } }
+    BackHandler { onStopEditing() }
 
     Column(modifier) {
         gridLayout.EditTileGrid(
@@ -41,7 +42,7 @@ fun EditMode(viewModel: EditModeViewModel, modifier: Modifier = Modifier) {
             viewModel::addTile,
             viewModel::removeTile,
             viewModel::setTiles,
-            viewModel::stopEditing,
+            onStopEditing,
         )
     }
 }

@@ -53,9 +53,11 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -119,6 +121,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
@@ -132,6 +135,8 @@ import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
@@ -154,6 +159,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastMap
 import androidx.compose.ui.zIndex
@@ -174,6 +180,8 @@ import com.android.systemui.qs.panels.ui.compose.EditTileListState.Companion.INV
 import com.android.systemui.qs.panels.ui.compose.dragAndDropRemoveZone
 import com.android.systemui.qs.panels.ui.compose.dragAndDropTileList
 import com.android.systemui.qs.panels.ui.compose.dragAndDropTileSource
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.EdithInactiveTileAlpha
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.EdithTileSpacing
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.InactiveTileCornerRadius
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.TileArrangementPadding
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults.TileHeight
@@ -247,6 +255,8 @@ fun DefaultEditTileGrid(
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState(),
     onStopEditing: () -> Unit = {},
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
     onEditAction: (EditAction) -> Unit = {},
 ) {
     val selectionState = rememberSelectionState()
@@ -354,6 +364,8 @@ fun DefaultEditTileGrid(
                         listState = listState,
                         selectionState = selectionState,
                         onEditAction = onEditAction,
+                        edithTileStyle = edithTileStyle,
+                        edithColorEnabled = edithColorEnabled,
                     )
 
                     // Only show available tiles when a drag or placement isn't in progress, OR the
@@ -367,6 +379,8 @@ fun DefaultEditTileGrid(
                         showAvailableTiles =
                             !(listState.dragInProgress || selectionState.placementEnabled) ||
                                 listState.dragType == DragType.Move,
+                        edithTileStyle = edithTileStyle,
+                        edithColorEnabled = edithColorEnabled,
                     )
                 }
             }
@@ -437,7 +451,7 @@ private fun NavBarInsetScrollZone(modifier: Modifier = Modifier, content: @Compo
  * selection was removed from the grid.
  */
 @Composable
-private fun AutoSelectTiles(listState: EditTileListState, selectionState: MutableSelectionState) {
+internal fun AutoSelectTiles(listState: EditTileListState, selectionState: MutableSelectionState) {
     val specs = listState.tileSpecs()
     val selection = selectionState.selection
 
@@ -535,7 +549,7 @@ private fun rememberEditModeState(
 }
 
 @Composable
-private fun TopBarSubtitle(
+internal fun TopBarSubtitle(
     listState: EditTileListState,
     selectionState: MutableSelectionState,
     modifier: Modifier = Modifier,
@@ -557,7 +571,7 @@ private fun TopBarSubtitle(
 }
 
 @Composable
-private fun RemoveButton(
+internal fun RemoveButton(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
@@ -598,16 +612,58 @@ private fun RemoveButton(
 }
 
 @Composable
-private fun CurrentTilesGrid(
+internal fun CurrentTilesGrid(
     listState: EditTileListState,
     selectionState: MutableSelectionState,
     onEditAction: (EditAction) -> Unit,
+    labelTiles: Boolean = false,
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
+) {
+    val currentListState by rememberUpdatedState(listState)
+    val spacing = if (edithTileStyle) EdithTileSpacing else TileArrangementPadding
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        // For square tiles the row height equals the cell width; otherwise it is the fixed height.
+        val tileSize =
+            if (edithTileStyle) {
+                val columns = listState.columns.coerceAtLeast(1)
+                val totalSpacing = spacing * (columns - 1)
+                (maxWidth - CurrentTilesGridPadding * 2 - totalSpacing) / columns
+            } else {
+                TileHeight
+            }
+        CurrentTilesGridContent(
+            listState = listState,
+            selectionState = selectionState,
+            onEditAction = onEditAction,
+            labelTiles = labelTiles,
+            edithTileStyle = edithTileStyle,
+            edithColorEnabled = edithColorEnabled,
+            tileSize = tileSize,
+            spacing = spacing,
+        )
+    }
+}
+
+@Composable
+private fun CurrentTilesGridContent(
+    listState: EditTileListState,
+    selectionState: MutableSelectionState,
+    onEditAction: (EditAction) -> Unit,
+    labelTiles: Boolean,
+    edithTileStyle: Boolean,
+    edithColorEnabled: Boolean,
+    tileSize: Dp,
+    spacing: Dp,
 ) {
     val currentListState by rememberUpdatedState(listState)
     val totalRows = listState.tiles.lastOrNull()?.row ?: 0
     val totalHeight by
         animateDpAsState(
-            gridHeight(totalRows + 1, TileHeight, TileArrangementPadding, CurrentTilesGridPadding),
+            // The grid content is `rows*tile + (rows-1)*spacing + 2*padding`; gridHeight counts one
+            // extra spacing, so subtract it for the Edith square tiles.
+            gridHeight(totalRows + 1, tileSize, spacing, CurrentTilesGridPadding)
+                .let { if (edithTileStyle) it - spacing else it },
             label = "QSEditCurrentTilesGridHeight",
         )
     val gridState = rememberLazyGridState()
@@ -619,6 +675,7 @@ private fun CurrentTilesGrid(
         state = gridState,
         columns = GridCells.Fixed(listState.columns),
         contentPadding = PaddingValues(CurrentTilesGridPadding),
+        spacing = spacing,
         modifier =
             Modifier.fillMaxWidth()
                 .height { totalHeight.roundToPx() }
@@ -649,6 +706,9 @@ private fun CurrentTilesGrid(
             gridState = gridState,
             coroutineScope = coroutineScope,
             onRemoveTile = { onEditAction(EditAction.RemoveTile(it)) },
+            labelTiles = labelTiles,
+            edithTileStyle = edithTileStyle,
+            edithColorEnabled = edithColorEnabled,
         ) { resizingOperation ->
             when (resizingOperation) {
                 is TemporaryResizeOperation -> {
@@ -675,13 +735,14 @@ private fun TileLazyGrid(
     modifier: Modifier = Modifier,
     state: LazyGridState = rememberLazyGridState(),
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    spacing: Dp = TileArrangementPadding,
     content: LazyGridScope.() -> Unit,
 ) {
     LazyVerticalGrid(
         state = state,
         columns = columns,
-        verticalArrangement = spacedBy(TileArrangementPadding),
-        horizontalArrangement = spacedBy(TileArrangementPadding),
+        verticalArrangement = spacedBy(spacing),
+        horizontalArrangement = spacedBy(spacing),
         contentPadding = contentPadding,
         userScrollEnabled = false,
         modifier = modifier,
@@ -690,7 +751,7 @@ private fun TileLazyGrid(
 }
 
 @Composable
-private fun AnimatedAvailableTilesGrid(
+internal fun AnimatedAvailableTilesGrid(
     allTiles: List<EditTileViewModel>,
     listState: EditTileListState,
     selectionState: MutableSelectionState,
@@ -698,6 +759,9 @@ private fun AnimatedAvailableTilesGrid(
     canLayoutTile: Boolean,
     onEditAction: (EditAction) -> Unit,
     modifier: Modifier = Modifier,
+    availableColumns: Int = listState.columns,
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
 ) {
     // Sets a minimum height to be used when available tiles are hidden
     Box(
@@ -721,10 +785,12 @@ private fun AnimatedAvailableTilesGrid(
                 AvailableTileGrid(
                     allTiles,
                     selectionState,
-                    listState.columns,
+                    availableColumns,
                     canLayoutTile = canLayoutTile,
                     { onEditAction(EditAction.AddTile(it)) }, // Add to the end
                     listState,
+                    edithTileStyle = edithTileStyle,
+                    edithColorEnabled = edithColorEnabled,
                 )
 
                 TextButton(
@@ -754,6 +820,8 @@ private fun AvailableTileGrid(
     canLayoutTile: Boolean,
     onAddTile: (TileSpec) -> Unit,
     dragAndDropState: DragAndDropState,
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
 ) {
     // Group and sort to get the proper order tiles should be displayed in
     val groupedTileSpecs =
@@ -802,7 +870,10 @@ private fun AvailableTileGrid(
                     )
                     tileSpecs.chunked(columns).forEach { row ->
                         Row(
-                            horizontalArrangement = spacedBy(TileArrangementPadding),
+                            horizontalArrangement =
+                                spacedBy(
+                                    if (edithTileStyle) EdithTileSpacing else TileArrangementPadding
+                                ),
                             modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
                         ) {
                             for (tileSpec in row) {
@@ -815,6 +886,8 @@ private fun AvailableTileGrid(
                                         canLayoutTile = canLayoutTile,
                                         onAddTile = onAddTile,
                                         modifier = Modifier.weight(1f).fillMaxHeight(),
+                                        edithTileStyle = edithTileStyle,
+                                        edithColorEnabled = edithColorEnabled,
                                     )
                                 }
                             }
@@ -853,6 +926,9 @@ fun LazyGridScope.EditTiles(
     gridState: LazyGridState,
     coroutineScope: CoroutineScope,
     onRemoveTile: (TileSpec) -> Unit,
+    labelTiles: Boolean = false,
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
     onResize: (operation: ResizeOperation) -> Unit,
 ) {
     itemsIndexed(
@@ -871,8 +947,14 @@ fun LazyGridScope.EditTiles(
                                 MaterialTheme.colorScheme.secondary.copy(
                                     alpha = EditModeTileDefaults.PLACEHOLDER_ALPHA
                                 ),
-                            shape = RoundedCornerShape(InactiveTileCornerRadius),
-                        )
+                            shape =
+                                if (edithTileStyle) {
+                                    RoundedCornerShape(percent = 50)
+                                } else {
+                                    RoundedCornerShape(InactiveTileCornerRadius)
+                                },
+                        ),
+                        square = edithTileStyle,
                     )
                 } else {
                     TileGridCell(
@@ -885,6 +967,9 @@ fun LazyGridScope.EditTiles(
                         onRemoveTile = onRemoveTile,
                         coroutineScope = coroutineScope,
                         largeTilesSpan = listState.largeTilesSpan,
+                        labelTiles = labelTiles,
+                        edithTileStyle = edithTileStyle,
+                        edithColorEnabled = edithColorEnabled,
                     )
                 }
             is SpacerGridCell ->
@@ -923,6 +1008,9 @@ private fun LazyGridItemScope.TileGridCell(
     onRemoveTile: (TileSpec) -> Unit,
     coroutineScope: CoroutineScope,
     largeTilesSpan: Int,
+    labelTiles: Boolean,
+    edithTileStyle: Boolean,
+    edithColorEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val stateDescription = stringResource(id = R.string.accessibility_qs_edit_position, index + 1)
@@ -972,7 +1060,13 @@ private fun LazyGridItemScope.TileGridCell(
             .collect { anchorsData = it }
     }
 
-    val colors = EditModeTileDefaults.editTileColors()
+    val colors =
+        if (edithTileStyle && edithColorEnabled) {
+            EditModeTileDefaults.edithTertiaryEditTileColors(active = false)
+        } else {
+            EditModeTileDefaults.editTileColors()
+        }
+    val inactiveCorner = InactiveTileCornerRadius
     val toggleSizeLabel = stringResource(R.string.accessibility_qs_edit_toggle_tile_size_action)
     val togglePlacementModeLabel =
         stringResource(R.string.accessibility_qs_edit_toggle_placement_mode)
@@ -999,10 +1093,18 @@ private fun LazyGridItemScope.TileGridCell(
     InteractiveTileContainer(
         tileState = tileState,
         resizingState = resizingState,
+        // Resizing is only meaningful when there are large (span > 1) tiles. In the Edith QS style
+        // every tile is 1x1 (largeTilesSpan == 1), so the resizing handle is hidden.
+        resizable = largeTilesSpan > 1,
         modifier =
             modifier
-                .height(TileHeight)
-                .fillMaxWidth()
+                .then(
+                    if (edithTileStyle) {
+                        Modifier.fillMaxWidth().aspectRatio(1f)
+                    } else {
+                        Modifier.height(TileHeight).fillMaxWidth()
+                    }
+                )
                 .animateItem(placementSpec = placementSpec)
                 .tileTestTag(cell.isIcon),
         onClick = {
@@ -1034,6 +1136,18 @@ private fun LazyGridItemScope.TileGridCell(
         val toggleSelectionLabel = stringResource(R.string.accessibility_qs_edit_toggle_selection)
         val placeTileLabel = stringResource(R.string.accessibility_qs_edit_place_tile_action)
         val containerAlpha by animateFloatAsState(if (tileState == TileState.GreyedOut) .4f else 1f)
+        val tileShape =
+            if (edithTileStyle) {
+                RoundedCornerShape(percent = 50)
+            } else {
+                RoundedCornerShape(inactiveCorner)
+            }
+        val tileBackgroundModifier =
+            Modifier.tileBackground(
+                shape = tileShape,
+                alpha = { containerAlpha },
+                color = { colors.background },
+            )
         Box(
             Modifier.fillMaxSize()
                 .clearAndSetSemantics {
@@ -1057,13 +1171,18 @@ private fun LazyGridItemScope.TileGridCell(
                                 }
                             )
                         } else {
-                            // Don't allow for resizing during placement mode
-                            actions.add(
-                                CustomAccessibilityAction(toggleSizeLabel) {
-                                    onResize(FinalResizeOperation(cell.tile.tileSpec, !cell.isIcon))
-                                    true
-                                }
-                            )
+                            // Don't allow for resizing during placement mode, or when there are no
+                            // large tiles (every tile is fixed 1x1).
+                            if (largeTilesSpan > 1) {
+                                actions.add(
+                                    CustomAccessibilityAction(toggleSizeLabel) {
+                                        onResize(
+                                            FinalResizeOperation(cell.tile.tileSpec, !cell.isIcon)
+                                        )
+                                        true
+                                    }
+                                )
+                            }
                             actions.add(
                                 CustomAccessibilityAction(toggleSelectionLabel) {
                                     selectionState.toggleSelection(cell.tile.tileSpec)
@@ -1077,20 +1196,64 @@ private fun LazyGridItemScope.TileGridCell(
                 }
                 .borderOnFocus(
                     MaterialTheme.colorScheme.secondary,
-                    CornerSize(InactiveTileCornerRadius),
+                    if (edithTileStyle) {
+                        CornerSize(percent = 50)
+                    } else {
+                        CornerSize(inactiveCorner)
+                    },
                 )
                 .thenIf(isSelectable) { draggableModifier }
-                .tileBackground(
-                    cornerRadius = InactiveTileCornerRadius,
-                    alpha = { containerAlpha },
-                    color = { colors.background },
-                )
-                .keyboardShortcuts(cell.tile.tileSpec, selectionState) {
+                .then(tileBackgroundModifier)
+                .keyboardShortcuts(
+                    cell.tile.tileSpec,
+                    selectionState,
+                    resizable = largeTilesSpan > 1,
+                ) {
                     onResize(FinalResizeOperation(cell.tile.tileSpec, !cell.isIcon))
                 }
                 .thenIf(isSelectable) { selectableModifier }
         ) {
-            EditTile(tile = cell.tile, state = resizingState, progress = resizingState::progress)
+            if (largeTilesSpan > 1) {
+                EditTile(tile = cell.tile, state = resizingState, progress = resizingState::progress)
+            } else if (labelTiles) {
+                // Edith Quick Actions editor: tiles are fixed 1x1 but should show their label,
+                // matching the Quick Actions preview. There is no resizing, so the tile is always
+                // rendered at full progress (icon on the leading side, label to its right).
+                EditTile(tile = cell.tile, state = resizingState, progress = { 1f })
+            } else {
+                // Edith QS style (e.g. the stock QS editor): every tile is a fixed 1x1 icon tile,
+                // so render it compactly (icon only), matching the QS tiles preview.
+                CompactEditTile(tile = cell.tile, colors = colors, edithTileStyle = edithTileStyle)
+            }
+        }
+    }
+}
+
+/** A compact, fixed 1x1 icon-only tile used in edit mode when tiles are not resizable. */
+@Composable
+private fun CompactEditTile(
+    tile: EditTileViewModel,
+    colors: TileColors,
+    edithTileStyle: Boolean = false,
+) {
+    // The tile background is drawn by the parent container; only draw the centered icon here.
+    if (edithTileStyle) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val iconSize = min(maxWidth, maxHeight) * EdithEditIconRatio
+            SmallTileContent(
+                iconProvider = { tile.icon },
+                color = colors.icon,
+                size = { iconSize },
+                modifier = Modifier.clearAndSetSemantics {},
+            )
+        }
+    } else {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            SmallTileContent(
+                iconProvider = { tile.icon },
+                color = colors.icon,
+                modifier = Modifier.clearAndSetSemantics {},
+            )
         }
     }
 }
@@ -1124,13 +1287,21 @@ private fun AvailableTileGridCell(
     canLayoutTile: Boolean,
     onAddTile: (TileSpec) -> Unit,
     modifier: Modifier = Modifier,
+    edithTileStyle: Boolean = false,
+    edithColorEnabled: Boolean = false,
 ) {
     val stateDescription: String? =
         if (cell.isCurrent) stringResource(R.string.accessibility_qs_edit_tile_already_added)
         else null
 
     val alpha by animateFloatAsState(if (cell.isCurrent) .38f else 1f)
-    val colors = EditModeTileDefaults.editTileColors()
+    val colors =
+        if (edithTileStyle && edithColorEnabled) {
+            EditModeTileDefaults.edithTertiaryEditTileColors(active = false)
+        } else {
+            EditModeTileDefaults.editTileColors()
+        }
+    val inactiveCorner = InactiveTileCornerRadius
     val onClick: () -> Unit = {
         onAddTile(cell.tileSpec)
         if (canLayoutTile) {
@@ -1161,7 +1332,11 @@ private fun AvailableTileGridCell(
                 }
                 .sysuiResTag(AVAILABLE_TILE_TEST_TAG),
     ) {
-        Box(Modifier.fillMaxWidth().height(TileHeight)) {
+        Box(
+            Modifier.fillMaxWidth().then(
+                if (edithTileStyle) Modifier.aspectRatio(1f) else Modifier.height(TileHeight)
+            )
+        ) {
             val draggableModifier =
                 if (cell.isCurrent || !canLayoutTile) {
                     Modifier
@@ -1174,14 +1349,24 @@ private fun AvailableTileGridCell(
                         selectionState.select(cell.tileSpec)
                     }
                 }
+            val availableTileShape =
+                if (edithTileStyle) {
+                    RoundedCornerShape(percent = 50)
+                } else {
+                    RoundedCornerShape(inactiveCorner)
+                }
             Box(
                 Modifier.then(draggableModifier)
                     .fillMaxSize()
                     .borderOnFocus(
                         MaterialTheme.colorScheme.secondary,
-                        CornerSize(InactiveTileCornerRadius),
+                        if (edithTileStyle) {
+                            CornerSize(percent = 50)
+                        } else {
+                            CornerSize(inactiveCorner)
+                        },
                     )
-                    .tileBackground(cornerRadius = InactiveTileCornerRadius) { colors.background }
+                    .tileBackground(shape = availableTileShape) { colors.background }
                     .clickable(
                         enabled = !cell.isCurrent,
                         onClick = onClick,
@@ -1189,12 +1374,28 @@ private fun AvailableTileGridCell(
                     )
             ) {
                 // Icon
-                SmallTileContent(
-                    iconProvider = { cell.icon },
-                    color = colors.icon,
-                    animateToEnd = true,
-                    modifier = Modifier.align(Alignment.Center).clearAndSetSemantics {},
-                )
+                if (edithTileStyle) {
+                    BoxWithConstraints(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val iconSize = min(maxWidth, maxHeight) * EdithEditIconRatio
+                        SmallTileContent(
+                            iconProvider = { cell.icon },
+                            color = colors.icon,
+                            animateToEnd = true,
+                            size = { iconSize },
+                            modifier = Modifier.clearAndSetSemantics {},
+                        )
+                    }
+                } else {
+                    SmallTileContent(
+                        iconProvider = { cell.icon },
+                        color = colors.icon,
+                        animateToEnd = true,
+                        modifier = Modifier.align(Alignment.Center).clearAndSetSemantics {},
+                    )
+                }
             }
 
             StaticTileBadge(
@@ -1266,9 +1467,17 @@ private fun BoxScope.AppIconText(
 }
 
 @Composable
-private fun SpacerGridCell(modifier: Modifier = Modifier) {
+private fun SpacerGridCell(modifier: Modifier = Modifier, square: Boolean = false) {
     // By default, spacers are invisible and exist purely to catch drag movements
-    Box(modifier.height(TileHeight).fillMaxWidth())
+    Box(
+        modifier.then(
+            if (square) {
+                Modifier.fillMaxWidth().aspectRatio(1f)
+            } else {
+                Modifier.height(TileHeight).fillMaxWidth()
+            }
+        )
+    )
 }
 
 @Composable
@@ -1367,9 +1576,19 @@ private fun Modifier.tileBackground(
     return clip(RoundedCornerShape(cornerRadius)).drawBehind { drawRect(color(), alpha = alpha()) }
 }
 
+private fun Modifier.tileBackground(
+    shape: Shape,
+    alpha: () -> Float = { 1f },
+    color: () -> Color,
+): Modifier {
+    // Clip tile contents from overflowing past the tile
+    return clip(shape).drawBehind { drawRect(color(), alpha = alpha()) }
+}
+
 private fun Modifier.keyboardShortcuts(
     tileSpec: TileSpec,
     selectionState: MutableSelectionState,
+    resizable: Boolean = true,
     onResize: () -> Unit,
 ): Modifier {
     return focusable().onKeyEvent {
@@ -1386,8 +1605,12 @@ private fun Modifier.keyboardShortcuts(
                     true
                 }
                 Key.R -> { // Resize
-                    onResize()
-                    true
+                    if (resizable) {
+                        onResize()
+                        true
+                    } else {
+                        false
+                    }
                 }
                 else -> false
             }
@@ -1420,9 +1643,38 @@ private object EditModeTileDefaults {
             secondaryLabel = MaterialTheme.colorScheme.onSurface,
             icon = MaterialTheme.colorScheme.onSurface,
         )
+
+    /**
+     * Edith QS color scheme for the editor tiles. The editor uses a single (circle) shape, so it
+     * uses the inactive tile colors (per-theme `edith_qs_tile_inactive_*` resources), with the
+     * background kept semi-transparent ([EdithInactiveTileAlpha]) to match the QS tiles.
+     */
+    @Composable
+    fun edithTertiaryEditTileColors(@Suppress("UNUSED_PARAMETER") active: Boolean): TileColors {
+        val context = LocalContext.current
+        // Read the config so the colors are re-resolved when the theme changes (ThemePicker).
+        val assetsSeq = LocalConfiguration.current.assetsSeq
+        val resolved =
+            remember(context, assetsSeq) {
+                context.getColor(R.color.edith_qs_tile_inactive_bg) to
+                    context.getColor(R.color.edith_qs_tile_inactive_icon)
+            }
+        val bg = Color(resolved.first).copy(alpha = EdithInactiveTileAlpha)
+        val fg = Color(resolved.second)
+        return TileColors(
+            background = bg,
+            iconBackground = bg,
+            label = fg,
+            secondaryLabel = fg,
+            icon = fg,
+        )
+    }
 }
 
 private const val EDIT_MODE_ROOT_TEST_TAG = "EditModeRoot"
 private const val CURRENT_TILES_GRID_TEST_TAG = "CurrentTilesGrid"
+
+/** Fraction of the (square) Edith edit tile occupied by the icon. */
+private const val EdithEditIconRatio = 0.38f
 private const val AVAILABLE_TILES_GRID_TEST_TAG = "AvailableTilesGrid"
 private const val AVAILABLE_TILE_TEST_TAG = "AvailableTileTestTag"

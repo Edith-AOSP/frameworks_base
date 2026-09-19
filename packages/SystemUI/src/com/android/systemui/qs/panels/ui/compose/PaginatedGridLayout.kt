@@ -30,6 +30,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -39,6 +40,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.integerResource
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.modifiers.padding
 import com.android.systemui.common.ui.compose.PagerDots
@@ -46,13 +48,12 @@ import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.development.ui.compose.BuildNumber
 import com.android.systemui.development.ui.viewmodel.BuildNumberViewModel
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.qs.edith.EdithQsStyleInteractor
 import com.android.systemui.qs.panels.dagger.PaginatedBaseLayoutType
 import com.android.systemui.qs.panels.ui.compose.Dimensions.FooterHeight
 import com.android.systemui.qs.panels.ui.compose.Dimensions.InterPageSpacing
-import com.android.systemui.qs.panels.ui.compose.toolbar.EditModeButton
 import com.android.systemui.qs.panels.ui.viewmodel.PaginatedGridViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.TileViewModel
-import com.android.systemui.qs.panels.ui.viewmodel.toolbar.EditModeButtonViewModel
 import com.android.systemui.res.R
 import javax.inject.Inject
 
@@ -60,6 +61,7 @@ class PaginatedGridLayout
 @Inject
 constructor(
     private val viewModelFactory: PaginatedGridViewModel.Factory,
+    private val edithQsStyleInteractor: EdithQsStyleInteractor,
     @PaginatedBaseLayoutType private val delegateGridLayout: PaginatableGridLayout,
 ) : GridLayout by delegateGridLayout {
     @Composable
@@ -78,7 +80,11 @@ constructor(
                 delegateGridLayout.viewModelFactory.create()
             }
 
-        val rows = integerResource(R.integer.quick_settings_paginated_grid_num_rows)
+        // The Edith QS style shows 2 rows per page; the stock layout uses the resource value.
+        val edithStyleEnabled by edithQsStyleInteractor.isEnabled.collectAsStateWithLifecycle()
+        val rows =
+            if (edithStyleEnabled) 2
+            else integerResource(R.integer.quick_settings_paginated_grid_num_rows)
         val pages =
             remember(tiles, rows, *delegateGridViewModel.pageKeys) {
                 delegateGridViewModel.splitIntoPages(tiles, rows)
@@ -152,8 +158,6 @@ constructor(
                 buildNumberViewModelFactory = viewModel.buildNumberViewModelFactory,
                 pagerState = pagerState,
                 showArrowsInPager = viewModel.showArrowsInPagerDots,
-                editButtonViewModelFactory = viewModel.editModeButtonViewModelFactory,
-                isVisible = { listening() && layoutState.isIdle() },
             )
         }
     }
@@ -169,22 +173,13 @@ private fun FooterBar(
     buildNumberViewModelFactory: BuildNumberViewModel.Factory,
     pagerState: PagerState,
     showArrowsInPager: Boolean,
-    editButtonViewModelFactory: EditModeButtonViewModel.Factory,
-    isVisible: () -> Boolean = { true },
 ) {
-    val editButtonViewModel =
-        rememberViewModel(traceName = "PaginatedGridLayout-editButtonViewModel") {
-            editButtonViewModelFactory.create()
-        }
-
     // Use requiredHeight so it won't be squished if the view doesn't quite fit. As this is
     // expected to be inside a scrollable container, this should not be an issue.
     // Also, we construct the layout this way to do the following:
     // * PagerDots is centered in the row, taking as much space as it needs.
     // * On the start side, we place the BuildNumber, taking as much space as it needs, but
     //   constrained by the available space left over after PagerDots.
-    // * On the end side, we place the edit mode button, with the same constraints as for
-    //   BuildNumber (but it will usually fit, as it's just a square button).
     Row(
         modifier = Modifier.requiredHeight(FooterHeight).fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -204,7 +199,6 @@ private fun FooterBar(
         )
         Row(Modifier.weight(1f)) {
             Spacer(modifier = Modifier.weight(1f))
-            EditModeButton(viewModel = editButtonViewModel, isVisible = isVisible())
         }
     }
 }

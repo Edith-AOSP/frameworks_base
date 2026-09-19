@@ -120,8 +120,11 @@ fun InteractiveTileContainer(
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
     contentDescription: String? = null,
+    resizable: Boolean = true,
     content: @Composable BoxScope.() -> Unit = {},
 ) {
+    // When resizing is disabled, the resizing handle (pill) is not shown and resizing gestures are
+    // disabled, but the selection border is kept.
     val transition: Transition<Decoration> = updateTransition(tileState.decoration())
     val decorationColor by transition.animateColor()
     val decorationAngle by transition.animateAngle()
@@ -131,11 +134,15 @@ fun InteractiveTileContainer(
     val badgeIconAlpha by transition.animateFloat { it.iconAlpha }
     val selectionBorderAlpha by transition.animateFloat { it.borderAlpha }
     val isIdle = transition.currentState == transition.targetState
-    val isDraggable = tileState == Selected
+    val isDraggable = resizable && tileState == Selected
     val isClickable = tileState == Selected || tileState == Removable
+    // The resizing handle decoration is only drawn when resizing is enabled. When disabled, no
+    // decoration is composed at all (avoids the handle flashing when selection changes); the
+    // selection border is still drawn above.
+    val showDecoration = resizable
 
     Box(
-        modifier.resizable(tileState == Selected, resizingState).selectionBorder(
+        modifier.resizable(resizable && tileState == Selected, resizingState).selectionBorder(
             selectionColor = MaterialTheme.colorScheme.primary,
             selectionBorderWidth = SelectedBorderWidth,
             cornerRadius = InactiveTileCornerRadius,
@@ -149,7 +156,8 @@ fun InteractiveTileContainer(
          * We need to hide the decoration if there is none this prevents the decoration from
          * blocking a hover/click of the tile
          */
-        if (!QsEditModeHoverFixes.isEnabled || tileState.decoration() !is NoDecoration) {
+        if (showDecoration &&
+            (!QsEditModeHoverFixes.isEnabled || tileState.decoration() !is NoDecoration)) {
             MinimumInteractiveSizeComponent(
                 angle = { decorationAngle },
                 offset = { decorationOffset },

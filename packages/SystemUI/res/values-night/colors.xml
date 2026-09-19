@@ -135,4 +135,10 @@
 
     <!-- Keyboard shortcut helper dialog -->
     <color name="ksh_key_item_color">@*android:color/system_on_surface_variant_dark</color>
+
+    <!-- Edith QS tertiary tile colors (dark). See values for the light mapping. -->
+    <color name="edith_qs_tile_active_bg">@android:color/system_accent3_200</color>
+    <color name="edith_qs_tile_active_icon">@android:color/system_accent3_800</color>
+    <color name="edith_qs_tile_inactive_bg">@android:color/system_accent3_800</color>
+    <color name="edith_qs_tile_inactive_icon">@android:color/system_accent3_100</color>
 </resources>
