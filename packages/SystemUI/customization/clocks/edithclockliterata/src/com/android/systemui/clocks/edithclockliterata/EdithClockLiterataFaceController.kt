@@ -172,8 +172,18 @@ class EdithClockLiterataFaceController(
 
             override fun onThemeChanged(theme: ThemeConfig) {
                 this@EdithClockLiterataFaceController.theme = theme
-                val lockscreenColor = theme.getDefaultColor(clockCtx.context)
-                val aodColor = theme.getAodColor(clockCtx.context)
+                // When no per-clock seed is set, read the accent from the host context so it
+                // follows the current system palette; the plugin context's resources are a stale
+                // snapshot and would keep the previous wallpaper's color.
+                val lockscreenColor =
+                    theme.seedColor
+                        ?: clockCtx.hostContext.getColor(
+                            if (theme.isDarkTheme) android.R.color.system_accent1_100
+                            else android.R.color.system_accent2_600
+                        )
+                val aodColor =
+                    theme.seedColor?.let { theme.getAodColor(clockCtx.context) }
+                        ?: clockCtx.hostContext.getColor(android.R.color.system_accent1_100)
                 if (isLargeClock) {
                     largeGroup?.updateColor(lockscreenColor, aodColor)
                 } else {
