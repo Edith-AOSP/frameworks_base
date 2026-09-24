@@ -63,6 +63,11 @@ sealed interface MediaNavigationViewModel {
         val durationText: String,
         /** User-facing string for the media progress time */
         val progressText: String,
+        /**
+         * When `true` the media has no known duration (e.g. a livestream): the seek bar is shown as
+         * an indeterminate track (no thumb, not scrubbable).
+         */
+        val isIndeterminate: Boolean = false,
     ) : MediaNavigationViewModel
 
     /** The seek bar should be hidden. */

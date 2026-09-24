@@ -19,6 +19,7 @@
 package com.android.systemui.media.remedia.ui.compose
 
 import android.util.Log
+import androidx.annotation.FloatRange
 import android.view.ViewConfiguration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -62,10 +63,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -103,7 +104,6 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.center
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
@@ -111,6 +111,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale as drawScopeScale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -125,10 +126,14 @@ import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.node.Ref
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -183,7 +188,6 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.verticalSquish
 import com.android.systemui.res.R
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.launch
 
@@ -205,6 +209,7 @@ fun Media(
     mediaSquishiness: () -> Float = { 1f },
     location: Media.Location,
     expansion: () -> Float = { 0F },
+    animateWithExpansion: Boolean = true,
 ) {
     val context = LocalContext.current
     val viewModel: MediaViewModel =
@@ -227,6 +232,7 @@ fun Media(
         modifier = modifier,
         mediaSquishiness = mediaSquishiness,
         expansion = expansion,
+        animateWithExpansion = animateWithExpansion,
     )
 }
 
@@ -247,6 +253,7 @@ private fun CardCarousel(
     modifier: Modifier = Modifier,
     mediaSquishiness: () -> Float,
     expansion: () -> Float,
+    animateWithExpansion: Boolean,
 ) {
     AnimatedVisibility(
         visible = viewModel.isCarouselVisible,
@@ -261,6 +268,7 @@ private fun CardCarousel(
             onDismissed = onDismissed,
             mediaSquishiness = mediaSquishiness,
             expansion = expansion,
+            animateWithExpansion = animateWithExpansion,
         )
     }
 }
@@ -274,6 +282,7 @@ private fun CardCarouselContent(
     modifier: Modifier = Modifier,
     mediaSquishiness: () -> Float,
     expansion: () -> Float,
+    animateWithExpansion: Boolean,
 ) {
     val carouselState = rememberCarouselState {
         if (behavior.isCarouselScrollingEnabled) {
@@ -364,6 +373,7 @@ private fun CardCarouselContent(
                             carouselStyle = presentationStyle,
                             mediaSquishiness = mediaSquishiness,
                             expansion = expansion,
+                            animateWithExpansion = animateWithExpansion,
                             modifier =
                                 Modifier.maskClip(roundedCornerShape)
                                     .fillMaxWidth()
@@ -419,6 +429,7 @@ private fun Card(
     modifier: Modifier = Modifier,
     mediaSquishiness: () -> Float,
     expansion: () -> Float,
+    animateWithExpansion: Boolean,
 ) {
     val viewModel = mediaViewModel.cards[cardIndex]
     val stlState =
@@ -524,10 +535,11 @@ private fun Card(
             }
         }
 
-        LaunchedEffect(cardStyle) {
+        LaunchedEffect(cardStyle, animateWithExpansion) {
             launch {
                 if (
-                    cardStyle != MediaPresentationStyle.Thumbnail &&
+                    animateWithExpansion &&
+                        cardStyle != MediaPresentationStyle.Thumbnail &&
                         carouselStyle == MediaPresentationStyle.Compressed
                 ) {
                     synchronizeMediaState(
@@ -657,13 +669,19 @@ private fun ContentScope.CardForegroundContent(
     Column(
         modifier =
             modifier
+                .fillMaxWidth()
+                // Note: no fixed height. The card is content-wrapped like stock; the QS panel's
+                // media `Element` (QSFragmentCompose.MediaObject) owns any expansion-driven height,
+                // and pinning a hard 176dp here fought that animation during the QS transition.
                 .combinedClickable(
                     onClick = { viewModel.onClick(expandable) },
                     onLongClick = viewModel.onLongClick,
                 )
                 .semantics { contentDescription = viewModel.contentDescription }
     ) {
-        // Always add the first/top row, regardless of presentation style.
+        // The Edith three-row layout renders its own context header, so the stock top row
+        // (app icon + output chips) is only used for the other presentation styles.
+        if (!threeRows) {
         Box(modifier = Modifier.fillMaxWidth()) {
             // Icon.
             Element(key = Media.Elements.AppIcon, modifier = modifier) {
@@ -761,6 +779,7 @@ private fun ContentScope.CardForegroundContent(
                 }
             }
         }
+        }
 
         // If the card is taller than necessary to show all the rows, this adds spacing
         // between the top row and the rows below, anchoring the next rows to the bottom
@@ -770,59 +789,112 @@ private fun ContentScope.CardForegroundContent(
         }
 
         if (threeRows) {
-            // Three row presentation style.
-            //
-            // Second row.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp).heightIn(min = 48.dp),
-            ) {
-                Metadata(
-                    title = viewModel.title,
-                    subtitle = viewModel.subtitle,
-                    isExplicit = viewModel.isExplicit,
-                    color = Color.White,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp).animateContentSize(),
-                )
+            // Edith expanded layout:
+            //   1. Context header: (app icon) [App] on (output icon) [Device]
+            //   2. Metadata (title + artist), left aligned
+            //   3. Scrubber row: [elapsed] (seekbar) [duration]
+            //   4. Control bar: [left action] [prev] (pill play/pause) [next]
+            val areActionsVisible =
+                viewModel.actionButtonLayout == MediaCardActionButtonLayout.WithPlayPause
 
-                if (viewModel.actionButtonLayout == MediaCardActionButtonLayout.WithPlayPause) {
-                    AnimatedVisibility(visible = viewModel.playPauseAction != null) {
-                        PlayPauseAction(
-                            viewModel = viewModel.playPauseAction,
-                            buttonColor = colorScheme.primary,
-                            iconColor = colorScheme.onPrimary,
-                            buttonCornerRadius = { isPlaying -> if (isPlaying) 16.dp else 48.dp },
+            // 1. Context header: (app icon) App on (output icon) Device.
+            EdithContextHeader(
+                icon = viewModel.icon,
+                appName = viewModel.appName,
+                outputChip = viewModel.outputSwitcherChip,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+            )
+
+            // 2. Metadata.
+            Metadata(
+                title = viewModel.title,
+                subtitle = viewModel.subtitle,
+                isExplicit = viewModel.isExplicit,
+                color = Color.White,
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp)
+                        .animateContentSize(),
+            )
+
+            // 3. Scrubber row. The timestamps sit flush against the same 16dp insets as the
+            // metadata above, so the row is horizontally balanced.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                val navigationViewModel = viewModel.navigation
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier =
+                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                ) {
+                    if (navigationViewModel is MediaNavigationViewModel.Showing) {
+                        TimestampText(navigationViewModel.progressText)
+                        EdithSeekBar(
+                            viewModel = navigationViewModel,
+                            modifier = Modifier.weight(1f),
                         )
+                        TimestampText(navigationViewModel.durationText)
+                    } else {
+                        Spacer(Modifier.weight(1f))
                     }
-                } else {
-                    Spacer(Modifier.size(width = 0.dp, height = 48.dp))
                 }
             }
 
-            // Third row.
+            // 4. Control bar: [additional0] [prev] (play) [next] [additional1], with the play/pause
+            // button centered. The far slots reserve equal width so the middle stays centered for
+            // 0/1/2 additional actions.
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                val navigationViewModel = viewModel.navigation as? MediaNavigationViewModel.Showing
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(start = 8.dp, end = 8.dp, top = 0.dp, bottom = 8.dp),
                 ) {
-                    val areActionsVisible =
-                        viewModel.actionButtonLayout == MediaCardActionButtonLayout.WithPlayPause
-                    Navigation(
-                        viewModel = viewModel.navigation,
-                        isSeekBarVisible = true,
-                        isLeftActionVisible = areActionsVisible,
-                        isRightActionVisible = areActionsVisible,
-                        modifier = Modifier.weight(1f),
-                    )
+                    // Far-left slot: additional action #0 (or reserved space).
+                    SecondarySlot(viewModel = viewModel.additionalActions.getOrNull(0), elementIndex = 0)
 
-                    viewModel.additionalActions.fastForEachIndexed { index, action ->
-                        SecondaryAction(
-                            viewModel = action,
-                            resId = "action$index",
-                            element = Media.Elements.additionalActionButton(index),
-                        )
+                    Spacer(Modifier.weight(1f))
+
+                    // Center group: skip back, play/pause, skip forward.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        navigationViewModel?.left?.let {
+                            SecondaryAction(
+                                viewModel = it,
+                                modifier = Modifier.sysuiResTag(MediaRes.PREV_BTN),
+                                element = Media.Elements.PrevButton,
+                            )
+                        }
+
+                        if (areActionsVisible) {
+                            AnimatedVisibility(visible = viewModel.playPauseAction != null) {
+                                PlayPauseAction(
+                                    viewModel = viewModel.playPauseAction,
+                                    buttonColor = colorScheme.primary,
+                                    iconColor = colorScheme.onPrimary,
+                                    buttonCornerRadius = { isPlaying ->
+                                        if (isPlaying) 22.dp else 44.dp
+                                    },
+                                )
+                            }
+                        }
+
+                        navigationViewModel?.right?.let {
+                            SecondaryAction(
+                                viewModel = it,
+                                modifier = Modifier.sysuiResTag(MediaRes.NEXT_BTN),
+                                element = Media.Elements.NextButton,
+                            )
+                        }
                     }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Far-right slot: additional action #1 (or reserved space).
+                    SecondarySlot(viewModel = viewModel.additionalActions.getOrNull(1), elementIndex = 1)
                 }
             }
         } else {
@@ -956,32 +1028,45 @@ private fun CardBackground(
     colorScheme: AnimatedColorScheme,
     modifier: Modifier = Modifier,
 ) {
-    Crossfade(targetState = image, modifier = modifier) { imageOrNull ->
-        val backgroundImage =
-            remember(imageOrNull) { imageOrNull?.let { (it as Icon.Loaded).asImageBitmap() } }
-        if (backgroundImage != null) {
+    // Note: `fillMaxSize()` is required here because the art `Image` below only has
+    // `fillMaxSize()`, and `Crossfade`'s content slot is content-wrapping. Without forcing the
+    // Crossfade node to fill the (matched) parent, the content slot is unbounded and the image
+    // lays out at its intrinsic bitmap size, centered, leaving gaps on all sides when the art is
+    // smaller than the card (e.g. a 16:9 bitmap in the 176dp expanded card).
+    //
+    // Cross-fade on the resolved bitmap (remembered by the underlying `Drawable` reference), not
+    // on the `Icon` wrapper: `Icon.Loaded` compares its `Drawable` by reference, and a background
+    // re-emit can wrap the *same* drawable in a new `Icon.Loaded`. Keying on the drawable avoids
+    // restarting the cross-fade (which showed up as a flicker) for unchanged art.
+    val drawable = (image as? Icon.Loaded)?.drawable
+    val backgroundImage =
+        remember(drawable) { drawable?.let { Icon.Loaded(it, contentDescription = null).asImageBitmap() } }
+    Crossfade(targetState = backgroundImage, modifier = modifier.fillMaxSize()) { bitmap ->
+        if (bitmap != null) {
             // Loaded art.
-            val gradientBaseColor = colorScheme.background
             Image(
-                bitmap = backgroundImage,
+                bitmap = bitmap,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier =
                     Modifier.fillMaxSize().drawWithContent {
-                        // Draw the content (loaded art).
-                        drawContent()
+                        // Over-crop: draw the art slightly larger than the node so thin
+                        // letterbox/border bars that some artwork bakes into its own pixels
+                        // (e.g. video thumbnails) are cropped off the edges. `Crop` already fills
+                        // the node; this only shaves the outermost fraction of the frame.
+                        drawScopeScale(
+                            scaleX = Media.ART_OVER_CROP_SCALE,
+                            scaleY = Media.ART_OVER_CROP_SCALE,
+                        ) {
+                            // Draw the content (loaded art). Explicit receiver: inside the scale
+                            // block the implicit receiver is the inner DrawScope.
+                            this@drawWithContent.drawContent()
+                        }
 
-                        if (image != null) {
-                            // Then draw the overlay.
-                            drawRect(
-                                brush =
-                                    Brush.radialGradient(
-                                        0f to gradientBaseColor.copy(alpha = 0.65f),
-                                        1f to gradientBaseColor.copy(alpha = 0.75f),
-                                        center = size.center,
-                                        radius = max(size.width, size.height) / 2,
-                                    )
-                            )
+                        if (bitmap != null) {
+                            // Then draw the scrim: the artwork's background color at 50% alpha
+                            // (flat, no gradient).
+                            drawRect(color = colorScheme.background.copy(alpha = 0.5f))
                         }
                     },
             )
@@ -1197,6 +1282,142 @@ private fun ContentScope.Navigation(
     }
 }
 
+/**
+ * A bare seek bar (no navigation buttons on the sides), used by the Edith expanded media layout so
+ * the slider can span the full width between the two timestamps. Behavior is identical to the seek
+ * bar inside [Navigation].
+ */
+@Composable
+private fun ContentScope.EdithSeekBar(
+    viewModel: MediaNavigationViewModel.Showing,
+    modifier: Modifier = Modifier,
+) {
+    val colors =
+        colors(
+            activeTrackColor = Color.White,
+            inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+            thumbColor = Color.White,
+        )
+    if (viewModel.isIndeterminate) {
+        // No known duration (e.g. a livestream): a full-width, non-interactive track. It animates
+        // (squiggly) while playing and is static when paused. No thumb, no scrubbing.
+        Box(
+            modifier =
+                modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .semantics { stateDescription = viewModel.contentDescription }
+        ) {
+            SeekBarTrack(
+                progress = { 1f },
+                isSquiggly = viewModel.isSquiggly,
+                colors = colors,
+                isThumbEnabled = false,
+                modifier = Modifier.fillMaxWidth().align(Alignment.Center),
+            )
+        }
+        return
+    }
+    val interactionSource = remember { MutableInteractionSource() }
+    val sliderDragDelta = remember {
+        // Not a mutableStateOf - this is never accessed in composition and using an anonymous
+        // object avoids generics boxing of inline Offset.
+        object {
+            var value = Offset.Zero
+        }
+    }
+    val isEnabled = viewModel.onScrubChange != null
+    val velocityTracker = remember { VelocityTracker() }
+    val context = LocalContext.current
+    val flingVelocity =
+        remember(context) { ViewConfiguration.get(context).scaledMinimumFlingVelocity * 10 }
+    var isDrag by remember { mutableStateOf(false) }
+    var isDragStartedOnThumb by remember { mutableStateOf(false) }
+    val currentProgress by rememberUpdatedState(viewModel.progress)
+    Slider(
+        interactionSource = interactionSource,
+        value = viewModel.progress,
+        enabled = isEnabled,
+        onValueChange = { progress ->
+            if (!isDrag || isDragStartedOnThumb) {
+                viewModel.onScrubChange?.invoke(progress)
+            }
+        },
+        onValueChangeFinished = {
+            val velocity = velocityTracker.calculateVelocity().x
+            if (!isDrag || isDragStartedOnThumb) {
+                viewModel.onScrubFinished?.invoke(
+                    sliderDragDelta.value,
+                    abs(velocity) < abs(flingVelocity),
+                )
+            }
+
+            isDragStartedOnThumb = false
+            isDrag = false
+        },
+        colors = colors,
+        thumb = {
+            if (isEnabled) {
+                SeekBarThumb(interactionSource = interactionSource, colors = colors)
+            }
+        },
+        track = { sliderState ->
+            SeekBarTrack(
+                sliderState = sliderState,
+                isSquiggly = viewModel.isSquiggly,
+                colors = colors,
+                isThumbEnabled = isEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .semantics { stateDescription = viewModel.contentDescription }
+                .pointerInput(Unit) {
+                    // Track and report the drag delta to the view-model so it can decide whether to
+                    // accept the next onValueChangeFinished or reject it if the drag was overly
+                    // vertical.
+                    awaitPointerEventScope {
+                        var down: PointerInputChange? = null
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+
+                            event.changes.forEach { change ->
+                                // Feed the velocity tracker to detect flings
+                                velocityTracker.addPosition(change.uptimeMillis, change.position)
+                            }
+                            when (event.type) {
+                                PointerEventType.Press -> {
+                                    down = event.changes.last()
+                                    isDrag = false
+                                }
+
+                                PointerEventType.Move -> {
+                                    val change = event.changes.last()
+
+                                    if (change.id == down?.id) {
+                                        if (!isDrag) {
+                                            val thumbX = size.width * currentProgress
+                                            // Add some forgiveness to hit target by 20dp radius
+                                            isDragStartedOnThumb =
+                                                abs(down.position.x - thumbX) < 20.dp.toPx()
+                                        }
+                                        isDrag = true
+                                        if (isDragStartedOnThumb) {
+                                            sliderDragDelta.value =
+                                                change.position - down.position
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+    )
+}
+
 /** Renders the thumb of the seek bar. */
 @Composable
 private fun SeekBarThumb(
@@ -1244,6 +1465,31 @@ private fun SeekBarTrack(
     amplitude: Dp = 3.dp,
     waveSpeedDpPerSec: Dp = 8.dp,
 ) {
+    SeekBarTrack(
+        // Read the slider value lazily inside the draw pass (see SeekBarTrack) so the track does
+        // not recompose on every progress tick / scrub frame.
+        progress = { sliderState.value },
+        isSquiggly = isSquiggly,
+        colors = colors,
+        isThumbEnabled = isThumbEnabled,
+        modifier = modifier,
+        waveLength = waveLength,
+        amplitude = amplitude,
+        waveSpeedDpPerSec = waveSpeedDpPerSec,
+    )
+}
+
+@Composable
+private fun SeekBarTrack(
+    @FloatRange(from = 0.0, to = 1.0) progress: () -> Float,
+    isSquiggly: Boolean,
+    colors: SliderColors,
+    isThumbEnabled: Boolean,
+    modifier: Modifier = Modifier,
+    waveLength: Dp = 20.dp,
+    amplitude: Dp = 3.dp,
+    waveSpeedDpPerSec: Dp = 8.dp,
+) {
     // Animating the amplitude allows the squiggle to gradually grow to its full height or shrink
     // back to a flat line as needed.
     val animatedAmplitude by
@@ -1277,7 +1523,7 @@ private fun SeekBarTrack(
 
     // Render the track.
     Canvas(modifier = modifier) {
-        val thumbPositionPx = size.width * sliderState.value
+        val thumbPositionPx = size.width * progress()
         val amplitudePx = amplitude.toPx()
         val animatedAmplitudePx = animatedAmplitude.toPx()
         val waveLengthPx = waveLength.toPx()
@@ -1443,6 +1689,93 @@ private fun CardGuts(
     }
 }
 
+/**
+ * A small header showing the streaming app and the connected audio device, e.g.
+ * "(app icon) Spotify on Pixel Buds Pro 2". The device name is clickable and opens the output
+ * switcher dialog.
+ */
+@Composable
+private fun EdithContextHeader(
+    icon: Icon,
+    appName: String,
+    outputChip: MediaDeviceChipViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val deviceName =
+        outputChip.text?.takeIf { it.isNotBlank() }?.toString()
+            ?: stringResource(R.string.edith_media_this_phone)
+    val headerDescription =
+        stringResource(R.string.edith_media_context_header, appName, deviceName)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier =
+            modifier.clearAndSetSemantics { contentDescription = headerDescription },
+    ) {
+        Icon(
+            icon = icon,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = appName,
+            color = Color.White,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+        )
+        Text(
+            text = stringResource(R.string.edith_media_on),
+            color = Color.White,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Normal,
+            maxLines = 1,
+        )
+        EdithOutputControl(
+            viewModel = outputChip,
+            deviceName = deviceName,
+        )
+    }
+}
+
+/** The output device name (semibold, text only), clickable to open the output switcher dialog. */
+@Composable
+private fun EdithOutputControl(
+    viewModel: MediaDeviceChipViewModel,
+    deviceName: String,
+    modifier: Modifier = Modifier,
+) {
+    val clickInteractionSource = remember { MutableInteractionSource() }
+    val expandable = remember { Expandable() }
+    Expandable(
+        expandable = expandable,
+        controller =
+            rememberExpandableController(color = Color.Transparent, shape = RectangleShape),
+        useModifierBasedImplementation = true,
+        defaultMinSize = false,
+        modifier = Modifier.wrapContentSize(),
+    ) {
+        Text(
+            text = deviceName,
+            color = Color.White,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            modifier =
+                modifier
+                    .clickable(
+                        interactionSource = clickInteractionSource,
+                        indication = null,
+                    ) {
+                        viewModel.onClick(expandable)
+                    }
+                    .clearAndSetSemantics { contentDescription = deviceName },
+        )
+    }
+}
+
 /** Renders the metadata labels of a track. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -1462,7 +1795,15 @@ private fun ContentScope.Metadata(
                 Text(
                     text = title,
                     modifier = Modifier.sysuiResTag(MediaRes.TITLE),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    style =
+                        MaterialTheme.typography.titleMediumEmphasized.copy(
+                            platformStyle = PlatformTextStyle(includeFontPadding = false),
+                            lineHeightStyle =
+                                LineHeightStyle(
+                                    alignment = LineHeightStyle.Alignment.Center,
+                                    trim = LineHeightStyle.Trim.Both,
+                                ),
+                        ),
                     color = color,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1487,7 +1828,15 @@ private fun ContentScope.Metadata(
                     Text(
                         text = subtitle,
                         modifier = Modifier.sysuiResTag(MediaRes.ARTIST),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style =
+                            MaterialTheme.typography.bodyMedium.copy(
+                                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                                lineHeightStyle =
+                                    LineHeightStyle(
+                                        alignment = LineHeightStyle.Alignment.Center,
+                                        trim = LineHeightStyle.Trim.Both,
+                                    ),
+                            ),
                         color = color,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1595,7 +1944,7 @@ private fun ContentScope.PlayPauseAction(
 ) {
     if (viewModel == null) return
 
-    val buttonSize = DpSize(width = 72.dp, height = 48.dp)
+    val buttonSize = DpSize(width = 64.dp, height = 44.dp)
     val cornerRadius: Dp by
         animateDpAsState(
             targetValue = buttonCornerRadius(viewModel.state != MediaSessionState.Paused),
@@ -1649,12 +1998,12 @@ private fun ContentScope.PlayPauseAction(
                             painter = painter,
                             contentDescription = viewModel.icon?.contentDescription?.load(),
                             tint = iconColor,
-                            modifier = Modifier.size(24.dp).sysuiResTag(MediaRes.PLAY_PAUSE_BTN),
+                            modifier = Modifier.size(22.dp).sysuiResTag(MediaRes.PLAY_PAUSE_BTN),
                         )
                     }
                 }
                 is MediaSessionState.Buffering -> {
-                    CircularProgressIndicator(color = iconColor, modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(color = iconColor, modifier = Modifier.size(22.dp))
                 }
             }
         }
@@ -1674,10 +2023,18 @@ private fun ContentScope.SecondaryAction(
     resId: String = MediaRes.EMPTY_STRING,
     element: ElementKey? = null,
     iconColor: Color = Color.White,
+    buttonSize: Dp = 48.dp,
+    contentPadding: Dp = 13.dp,
 ) {
     if (viewModel !is MediaSecondaryActionViewModel.None && element != null) {
         Element(key = element, modifier = modifier) {
-            SecondaryActionContent(viewModel = viewModel, iconColor = iconColor, resId = resId)
+            SecondaryActionContent(
+                viewModel = viewModel,
+                iconColor = iconColor,
+                resId = resId,
+                buttonSize = buttonSize,
+                contentPadding = contentPadding,
+            )
         }
     } else {
         SecondaryActionContent(
@@ -1685,7 +2042,40 @@ private fun ContentScope.SecondaryAction(
             iconColor = iconColor,
             resId = resId,
             modifier = modifier,
+            buttonSize = buttonSize,
+            contentPadding = contentPadding,
         )
+    }
+}
+
+/**
+ * Renders additional action [elementIndex] in a fixed-width slot, or a spacer of the same width when
+ * the action is absent, so the control bar's far slots always reserve equal width.
+ */
+private val FarSlotSize = 56.dp
+
+@Composable
+private fun ContentScope.SecondarySlot(
+    viewModel: MediaSecondaryActionViewModel?,
+    elementIndex: Int,
+) {
+    Box(modifier = Modifier.size(FarSlotSize), contentAlignment = Alignment.Center) {
+        val action = viewModel as? MediaSecondaryActionViewModel.Action
+        if (action != null) {
+            // Key by the action's stable identity so Compose keeps each action bound to the same
+            // slot across updates, instead of remapping (or reusing a stale binding) by index.
+            key(action.stableKey ?: "action$elementIndex") {
+                SecondaryAction(
+                    viewModel = action,
+                    resId = "action$elementIndex",
+                    element = Media.Elements.additionalActionButton(elementIndex),
+                    // Custom (far) icons are loaded bitmaps; use a larger glyph than the center
+                    // prev/next so they match visually.
+                    buttonSize = FarSlotSize,
+                    contentPadding = 12.dp,
+                )
+            }
+        }
     }
 }
 
@@ -1696,8 +2086,10 @@ private fun SecondaryActionContent(
     iconColor: Color,
     resId: String,
     modifier: Modifier = Modifier,
+    buttonSize: Dp = 48.dp,
+    contentPadding: Dp = 13.dp,
 ) {
-    val sharedModifier = modifier.size(48.dp).padding(13.dp)
+    val sharedModifier = modifier.size(buttonSize).padding(contentPadding)
     when (viewModel) {
         is MediaSecondaryActionViewModel.Action ->
             when (viewModel.icon) {
@@ -1730,9 +2122,11 @@ private fun SecondaryActionContent(
 
 @Composable
 private fun TimestampText(text: String) {
+    // No horizontal padding: the timestamp sits flush against the scrubber row's 16dp inset so its
+    // start aligns with the track title above; spacing to the seek bar comes from the row's
+    // Arrangement.spacedBy.
     Text(
         text = text,
-        modifier = Modifier.widthIn(min = 48.dp).padding(4.dp),
         color = Color.White,
         style = MaterialTheme.typography.labelMedium,
         fontSize = 12.sp,
@@ -1959,6 +2353,14 @@ object Media {
 
     const val TAG = "Media"
     val DEBUG = Log.isLoggable(TAG, Log.DEBUG)
+
+    /**
+     * How much to over-scale the background art past the card bounds (see `CardBackground`), so
+     * thin letterbox/border bars baked into the artwork's own pixels are cropped off the edges.
+     * `1.05` shaves ~2.5% off each edge.
+     */
+    const val ART_OVER_CROP_SCALE = 1.05f
+
     val DEFAULT_HEIGHT = 176.dp
     val COMPRESSED_HEIGHT = 128.dp
     val COMPACT_HEIGHT = 80.dp

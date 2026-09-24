@@ -33,6 +33,9 @@ interface MediaCardViewModel {
 
     val icon: Icon
 
+    /** Name of the app that's playing the media (used by the Edith context header). */
+    val appName: String
+
     val background: Icon?
 
     val colorScheme: MediaColorScheme?

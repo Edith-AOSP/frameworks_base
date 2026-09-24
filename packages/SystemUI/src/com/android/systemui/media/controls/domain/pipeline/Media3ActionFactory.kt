@@ -181,6 +181,12 @@ constructor(
                 false,
             )
 
+        // Assign the dedicated custom slots (C and D) first so they are always the first two custom
+        // actions (the iterator is sorted by a stable key), independent of whether the prev/next
+        // slots fall back to a custom action below.
+        val custom0 = nextCustomAction()
+        val custom1 = nextCustomAction()
+
         val prevOrCustom =
             prevButton
                 ?: if (reservePrev) {
@@ -201,10 +207,12 @@ constructor(
             playOrPause = playOrPause,
             nextOrCustom = nextOrCustom,
             prevOrCustom = prevOrCustom,
-            custom0 = nextCustomAction(),
-            custom1 = nextCustomAction(),
+            custom0 = custom0,
+            custom1 = custom1,
             reserveNext = reserveNext,
             reservePrev = reservePrev,
+            prev = prevButton,
+            next = nextButton,
         )
     }
 
@@ -226,6 +234,7 @@ constructor(
             }
             .toList()
             .map { button -> getCustomAction(packageName, token, button) }
+            .sortedBy { it.stableKey ?: it.contentDescription?.toString().orEmpty() }
             .iterator()
     }
 
@@ -250,6 +259,7 @@ constructor(
                     m3controller.isSessionCommandAvailable(it.sessionCommand!!)
             }
             .map { getCustomActionBlocking(packageName, token, it) }
+            .sortedBy { it.stableKey ?: it.contentDescription?.toString().orEmpty() }
             .iterator()
     }
 
@@ -313,6 +323,9 @@ constructor(
             { executeAction(packageName, token, Player.COMMAND_INVALID, customAction) },
             customAction.displayName,
             null,
+            stableKey =
+                customAction.displayName?.toString()
+                    ?: customAction.sessionCommand?.customAction,
         )
     }
 
@@ -331,6 +344,9 @@ constructor(
             { executeAction(packageName, token, Player.COMMAND_INVALID, customAction) },
             customAction.displayName,
             null,
+            stableKey =
+                customAction.displayName?.toString()
+                    ?: customAction.sessionCommand?.customAction,
         )
     }
 

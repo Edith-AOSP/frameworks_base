@@ -1116,17 +1116,20 @@ class LegacyMediaDataManagerImplTest : SysuiTestCase() {
         assertThat(actions.playOrPause!!.contentDescription)
             .isEqualTo(context.getString(R.string.controls_media_button_play))
 
-        assertThat(actions.prevOrCustom).isNotNull()
-        assertThat(actions.prevOrCustom!!.contentDescription).isEqualTo(customDesc[0])
-
-        assertThat(actions.nextOrCustom).isNotNull()
-        assertThat(actions.nextOrCustom!!.contentDescription).isEqualTo(customDesc[1])
-
+        // The dedicated custom slots are assigned first (in stable order), so with no real
+        // prev/next the custom0/custom1 slots take the first two custom actions and prevOrCustom/
+        // nextOrCustom take the next two.
         assertThat(actions.custom0).isNotNull()
-        assertThat(actions.custom0!!.contentDescription).isEqualTo(customDesc[2])
+        assertThat(actions.custom0!!.contentDescription).isEqualTo(customDesc[0])
 
         assertThat(actions.custom1).isNotNull()
-        assertThat(actions.custom1!!.contentDescription).isEqualTo(customDesc[3])
+        assertThat(actions.custom1!!.contentDescription).isEqualTo(customDesc[1])
+
+        assertThat(actions.prevOrCustom).isNotNull()
+        assertThat(actions.prevOrCustom!!.contentDescription).isEqualTo(customDesc[2])
+
+        assertThat(actions.nextOrCustom).isNotNull()
+        assertThat(actions.nextOrCustom!!.contentDescription).isEqualTo(customDesc[3])
     }
 
     @DisableFlags(Flags.FLAG_MEDIA_CONTROLS_BUTTON_MEDIA3)
