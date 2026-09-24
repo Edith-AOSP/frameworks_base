@@ -13,6 +13,7 @@
  */
 package com.android.systemui.clocks.edithclockliterata
 
+import android.content.Context
 import com.android.systemui.customization.clocks.ClockContext
 import com.android.systemui.customization.clocks.ClockContextImpl
 import com.android.systemui.customization.clocks.TypefaceCache
@@ -21,11 +22,18 @@ import com.android.systemui.log.core.MessageBuffer
 class EdithClockLiterataContext(
     val typefaceCache: TypefaceCache<Unit>,
     private val innerCtx: ClockContextImpl,
+    /**
+     * The host application context. Its resources are updated in place when the system theme (e.g.
+     * the wallpaper-derived palette) changes, unlike the plugin context's resource snapshot, so the
+     * clock re-reads its accent from here on theme changes.
+     */
+    val hostContext: Context,
 ) : ClockContext by innerCtx {
     fun copy(messageBuffer: MessageBuffer): EdithClockLiterataContext {
         return EdithClockLiterataContext(
             typefaceCache,
             innerCtx.copy(messageBuffer = messageBuffer),
+            hostContext,
         )
     }
 }
