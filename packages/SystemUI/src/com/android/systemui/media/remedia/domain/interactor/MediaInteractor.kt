@@ -20,6 +20,7 @@ import android.app.ActivityOptions
 import android.app.BroadcastOptions
 import android.app.PendingIntent
 import android.content.Context
+import android.graphics.drawable.Drawable
 import android.content.Intent
 import android.media.session.MediaSession
 import android.os.UserHandle
@@ -36,6 +37,7 @@ import com.android.systemui.animation.DialogTransitionAnimator
 import com.android.systemui.animation.Expandable
 import com.android.systemui.common.shared.model.ContentDescription
 import com.android.systemui.common.shared.model.Icon
+import com.android.systemui.media.controls.shared.MediaControlDrawables
 import com.android.systemui.common.shared.model.asIcon
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -313,26 +315,38 @@ constructor(
                         ?.playOrPause
                         ?.getMediaActionModel(R.id.actionPlayPause) ?: MediaActionModel.None
 
+            // Use the "real" skip actions only (never a custom fallback) so the previous/next
+            // buttons stay stable regardless of the session's volatile custom action set. When the
+            // session disables seeking, keep a (dimmed, non-clickable) slot so the control bar stays
+            // balanced; if no icon is available, reserve the space instead.
             override val leftAction: MediaActionModel
                 get() =
                     dataModel.playbackStateActions?.let {
-                        it.prevOrCustom?.getMediaActionModel(R.id.actionPrev)
-                            ?: if (it.reservePrev) {
-                                MediaActionModel.ReserveSpace
-                            } else {
-                                MediaActionModel.None
+                        it.prev?.getMediaActionModel(R.id.actionPrev)
+                            ?: MediaControlDrawables.getPrevIcon(applicationContext)?.let { icon ->
+                                MediaActionModel.Action(
+                                    id = R.id.actionPrev,
+                                    icon = Icon.Loaded(icon.freshCopy(), contentDescription = null),
+                                    onClick = null,
+                                    stableKey = "prev",
+                                )
                             }
+                            ?: MediaActionModel.ReserveSpace
                     } ?: MediaActionModel.None
 
             override val rightAction: MediaActionModel
                 get() =
                     dataModel.playbackStateActions?.let {
-                        it.nextOrCustom?.getMediaActionModel(R.id.actionNext)
-                            ?: if (it.reserveNext) {
-                                MediaActionModel.ReserveSpace
-                            } else {
-                                MediaActionModel.None
+                        it.next?.getMediaActionModel(R.id.actionNext)
+                            ?: MediaControlDrawables.getNextIcon(applicationContext)?.let { icon ->
+                                MediaActionModel.Action(
+                                    id = R.id.actionNext,
+                                    icon = Icon.Loaded(icon.freshCopy(), contentDescription = null),
+                                    onClick = null,
+                                    stableKey = "next",
+                                )
                             }
+                            ?: MediaActionModel.ReserveSpace
                     } ?: MediaActionModel.None
 
             override val additionalActions: List<MediaActionModel.Action>
@@ -359,6 +373,13 @@ constructor(
         }
     }
 
+    /**
+     * Returns an independent copy of this drawable, so multiple UI slots never share (and mutate) a
+     * single [Drawable] instance (e.g. the cached prev/next icons).
+     */
+    private fun Drawable.freshCopy(): Drawable =
+        constantState?.newDrawable()?.mutate() ?: this
+
     private fun MediaAction.getMediaActionModel(id: Int? = null): MediaActionModel {
         return icon?.let { drawable ->
             MediaActionModel.Action(
@@ -370,6 +391,9 @@ constructor(
                             contentDescription?.let { ContentDescription.Loaded(it.toString()) },
                     ),
                 onClick = { action?.run() },
+                // Prefer the action's own stable key; otherwise fall back to the slot id so every
+                // action still has a deterministic, non-null identity for UI keying.
+                stableKey = stableKey ?: id?.takeIf { it > 0 }?.toString(),
             )
         } ?: MediaActionModel.None
     }

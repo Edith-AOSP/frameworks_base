@@ -133,6 +133,17 @@ data class MediaButton(
     val reserveNext: Boolean = false,
     /** Whether to reserve the empty space when the prevOrCustom is null */
     val reservePrev: Boolean = false,
+    /**
+     * The "real" skip-to-previous action (ACTION_SKIP_TO_PREVIOUS), or null if the session does not
+     * provide one. Unlike [prevOrCustom] this never falls back to a custom action, so UIs that want
+     * a stable previous button can rely on it.
+     */
+    val prev: MediaAction? = null,
+    /**
+     * The "real" skip-to-next action (ACTION_SKIP_TO_NEXT), or null if the session does not provide
+     * one. Unlike [nextOrCustom] this never falls back to a custom action.
+     */
+    val next: MediaAction? = null,
 ) {
     fun getActionById(id: Int): MediaAction? {
         return when (id) {
@@ -157,6 +168,14 @@ data class MediaAction(
     // to prevent continuously looping animations from restarting due to the arrival
     // of repeated media notifications that are visually identical.
     val rebindId: Int? = null,
+
+    /**
+     * A stable, app-agnostic identity for the action (for custom actions, the
+     * `PlaybackState.CustomAction` name, falling back to the content description). Used to order
+     * custom actions deterministically so UI slots do not swap as the session updates. Null for
+     * standard actions.
+     */
+    val stableKey: String? = null,
 )
 
 /** State of a media action from notification. */

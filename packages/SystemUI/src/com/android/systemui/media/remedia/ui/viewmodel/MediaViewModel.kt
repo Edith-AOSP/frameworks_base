@@ -105,6 +105,7 @@ constructor(
                 object : MediaCardViewModel {
                     override val key = session.key
                     override val icon = session.appIcon
+                    override val appName = session.appName
                     override val background: Icon?
                         get() = session.background
 
@@ -153,6 +154,8 @@ constructor(
                                 isScrubbing = false
                             }
 
+                            val left = session.leftAction.toSecondaryActionViewModel(session)
+                            val right = session.rightAction.toSecondaryActionViewModel(session)
                             return if (session.canShowSeekbar) {
                                 MediaNavigationViewModel.Showing(
                                     progress =
@@ -161,8 +164,8 @@ constructor(
                                         } else {
                                             seekProgress
                                         },
-                                    left = session.leftAction.toSecondaryActionViewModel(session),
-                                    right = session.rightAction.toSecondaryActionViewModel(session),
+                                    left = left,
+                                    right = right,
                                     isSquiggly =
                                         session.state != MediaSessionState.Paused &&
                                             !isCurrentSessionAndScrubbing,
@@ -188,9 +191,24 @@ constructor(
                                     durationText = formatTimeLabel(session.durationMs),
                                 )
                             } else {
-                                MediaNavigationViewModel.Hidden(
-                                    left = session.leftAction.toSecondaryActionViewModel(session),
-                                    right = session.rightAction.toSecondaryActionViewModel(session),
+                                // No known duration (e.g. a livestream): show the seek bar as an
+                                // indeterminate track so the layout stays balanced. It animates
+                                // (squiggly) while playing and is static when paused, with no thumb
+                                // and no scrubbing, and "--:--" timestamps.
+                                val unknown = context.getString(R.string.edith_media_time_unknown)
+                                MediaNavigationViewModel.Showing(
+                                    progress = 0f,
+                                    left = left,
+                                    right = right,
+                                    isSquiggly = session.state != MediaSessionState.Paused,
+                                    isScrubbing = false,
+                                    onScrubChange = null,
+                                    onScrubFinished = null,
+                                    contentDescription =
+                                        context.getString(R.string.edith_media_live_description),
+                                    progressText = unknown,
+                                    durationText = unknown,
+                                    isIndeterminate = true,
                                 )
                             }
                         }
@@ -495,6 +513,7 @@ constructor(
                                 }
                             }
                         },
+                    stableKey = stableKey,
                 )
             is MediaActionModel.ReserveSpace -> MediaSecondaryActionViewModel.ReserveSpace
             is MediaActionModel.None -> MediaSecondaryActionViewModel.None

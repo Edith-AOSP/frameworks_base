@@ -3902,6 +3902,17 @@
     <!-- Description for a button that opens the output switcher dialog [CHAR_LIMIT=NONE] -->
     <string name="controls_media_output_chip">Open output settings</string>
 
+    <!-- Edith media player context header: shows the app and the output device, e.g. "Spotify on This phone" [CHAR_LIMIT=NONE] -->
+    <string name="edith_media_context_header"><xliff:g id="app" example="Spotify">%1$s</xliff:g> on <xliff:g id="device" example="This phone">%2$s</xliff:g></string>
+    <!-- Edith media player context header: the word joining the app and the output device [CHAR_LIMIT=NONE] -->
+    <string name="edith_media_on">on</string>
+    <!-- Edith media player context header: fallback output device name when the phone's own output is used [CHAR_LIMIT=NONE] -->
+    <string name="edith_media_this_phone">This phone</string>
+    <!-- Edith media player: timestamp shown when the media duration is unknown (e.g. a livestream) [CHAR_LIMIT=5] -->
+    <string name="edith_media_time_unknown" translatable="false">--:--</string>
+    <!-- Edith media player: accessibility description for the indeterminate seek bar of a livestream [CHAR_LIMIT=NONE] -->
+    <string name="edith_media_live_description">Live</string>
+
     <!--- ****** Media tap-to-transfer ****** -->
     <!-- Text for a button to undo the media transfer. [CHAR LIMIT=20] -->
     <string name="media_transfer_undo">Undo</string>

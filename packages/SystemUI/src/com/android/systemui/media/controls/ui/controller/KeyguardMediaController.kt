@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.android.compose.theme.PlatformTheme
 import com.android.systemui.Dumpable
 import com.android.systemui.classifier.Classifier
 import com.android.systemui.dagger.SysUISingleton
@@ -177,27 +178,30 @@ constructor(
 
     private fun setComposeContent(composeView: ComposeView) {
         composeView.setContent {
-            val transitionAlpha by remember {
-                derivedStateOf {
-                    // This maps the 0.0 -> 0.25 progress to 1.0 -> 0.0 Alpha
-                    (1f - (fullShadeTransitionProgress / 0.25f)).coerceIn(0f, 1f)
+            // Match the Quick Settings media card theming (notably the platform typography).
+            PlatformTheme {
+                val transitionAlpha by remember {
+                    derivedStateOf {
+                        // This maps the 0.0 -> 0.25 progress to 1.0 -> 0.0 Alpha
+                        (1f - (fullShadeTransitionProgress / 0.25f)).coerceIn(0f, 1f)
+                    }
                 }
+                Media(
+                    viewModelFactory = mediaViewModelFactory,
+                    presentationStyle = MediaPresentationStyle.Default,
+                    behavior =
+                        MediaUiBehavior(
+                            carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
+                            isCarouselScrollFalseTouch = {
+                                falsingSystem.isFalseTouch(Classifier.MEDIA_CAROUSEL_SWIPE)
+                            },
+                        ),
+                    onDismissed = { mediaCarouselInteractor.onSwipeToDismiss() },
+                    modifier = Modifier.graphicsLayer { alpha = transitionAlpha },
+                    visible = { visible },
+                    location = Media.Location.LOCKSCREEN,
+                )
             }
-            Media(
-                viewModelFactory = mediaViewModelFactory,
-                presentationStyle = MediaPresentationStyle.Default,
-                behavior =
-                    MediaUiBehavior(
-                        carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
-                        isCarouselScrollFalseTouch = {
-                            falsingSystem.isFalseTouch(Classifier.MEDIA_CAROUSEL_SWIPE)
-                        },
-                    ),
-                onDismissed = { mediaCarouselInteractor.onSwipeToDismiss() },
-                modifier = Modifier.graphicsLayer { alpha = transitionAlpha },
-                visible = { visible },
-                location = Media.Location.LOCKSCREEN,
-            )
         }
     }
 

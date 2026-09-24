@@ -85,12 +85,14 @@ fun createActionsFromState(
     val nextButton =
         getStandardAction(context, controller, state.actions, PlaybackState.ACTION_SKIP_TO_NEXT)
 
-    // Then, create a way to build any custom actions that will be needed
+    // Then, create a way to build any custom actions that will be needed. Build the full list up
+    // front and sort it by a stable, app-agnostic key (the CustomAction name) so the far custom
+    // slots are assigned deterministically regardless of the order the app re-publishes them in.
     val customActions =
         state.customActions
-            .asSequence()
             .filterNotNull()
             .map { getCustomAction(context, packageName, controller, it, userId) }
+            .sortedBy { it.stableKey ?: it.contentDescription?.toString().orEmpty() }
             .iterator()
     fun nextCustomAction() = if (customActions.hasNext()) customActions.next() else null
 
@@ -106,6 +108,12 @@ fun createActionsFromState(
         controller.extras?.getBoolean(
             MediaConstants.SESSION_EXTRAS_KEY_SLOT_RESERVATION_SKIP_TO_NEXT
         ) == true
+
+    // Assign the dedicated custom slots (C and D) first so they are always the first two custom
+    // actions in stable order, independent of whether the prev/next slots fall back to a custom
+    // action below. This keeps the custom slots (and therefore the UI) from shifting.
+    val custom0 = nextCustomAction()
+    val custom1 = nextCustomAction()
 
     val prevOrCustom =
         if (prevButton != null) {
@@ -129,10 +137,12 @@ fun createActionsFromState(
         playOrPause,
         nextOrCustom,
         prevOrCustom,
-        nextCustomAction(),
-        nextCustomAction(),
+        custom0,
+        custom1,
         reserveNext,
         reservePrev,
+        prev = prevButton,
+        next = nextButton,
     )
 }
 
@@ -206,6 +216,7 @@ private fun getCustomAction(
         { controller.transportControls.sendCustomAction(customAction, customAction.extras) },
         customAction.name,
         null,
+        stableKey = customAction.name?.toString() ?: customAction.action,
     )
 }
 
