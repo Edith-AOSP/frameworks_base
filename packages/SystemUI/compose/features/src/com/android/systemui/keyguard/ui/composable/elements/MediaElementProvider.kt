@@ -65,11 +65,18 @@ constructor(
             ) {
                 Media(
                     viewModelFactory = viewModel.mediaViewModelFactory,
-                    presentationStyle = MediaPresentationStyle.Default,
+                    presentationStyle =
+                        if (viewModel.isCompactMedia) {
+                            MediaPresentationStyle.Compressed
+                        } else {
+                            MediaPresentationStyle.Default
+                        },
                     behavior = viewModel.mediaUiBehavior,
                     onDismissed = viewModel::onSwipeToDismiss,
                     modifier = Modifier.fillMaxWidth(),
                     location = Media.Location.LOCKSCREEN,
+                    // No panel-expansion coupling on the lock screen: the card is static.
+                    animateWithExpansion = false,
                 )
             }
         }

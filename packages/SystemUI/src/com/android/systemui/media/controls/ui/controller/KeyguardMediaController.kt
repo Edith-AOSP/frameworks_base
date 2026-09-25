@@ -23,6 +23,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,7 @@ import com.android.systemui.media.dagger.MediaModule
 import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.ui.compose.Media
 import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
+import com.android.systemui.qs.edith.EdithLockscreenMediaInteractor
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaFalsingSystem
@@ -93,6 +95,7 @@ constructor(
     private val mediaViewModelFactory: MediaViewModel.Factory,
     private val mediaCarouselInteractor: MediaCarouselInteractor,
     private val falsingSystem: MediaFalsingSystem,
+    private val edithLockscreenMediaInteractor: EdithLockscreenMediaInteractor,
 ) : Dumpable {
     private var lastUsedStatusBarState = -1
 
@@ -186,9 +189,15 @@ constructor(
                         (1f - (fullShadeTransitionProgress / 0.25f)).coerceIn(0f, 1f)
                     }
                 }
+                val isCompactMedia by edithLockscreenMediaInteractor.isCompact.collectAsState()
                 Media(
                     viewModelFactory = mediaViewModelFactory,
-                    presentationStyle = MediaPresentationStyle.Default,
+                    presentationStyle =
+                        if (isCompactMedia) {
+                            MediaPresentationStyle.Compressed
+                        } else {
+                            MediaPresentationStyle.Default
+                        },
                     behavior =
                         MediaUiBehavior(
                             carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
@@ -200,6 +209,8 @@ constructor(
                     modifier = Modifier.graphicsLayer { alpha = transitionAlpha },
                     visible = { visible },
                     location = Media.Location.LOCKSCREEN,
+                    // No panel-expansion coupling on the lock screen: the card is static.
+                    animateWithExpansion = false,
                 )
             }
         }

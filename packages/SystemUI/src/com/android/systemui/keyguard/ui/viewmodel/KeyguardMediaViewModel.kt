@@ -24,6 +24,7 @@ import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarou
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
+import com.android.systemui.qs.edith.EdithLockscreenMediaInteractor
 import com.android.systemui.shade.domain.interactor.ShadeModeInteractor
 import com.android.systemui.shade.shared.model.ShadeMode
 import dagger.assisted.AssistedFactory
@@ -40,6 +41,7 @@ constructor(
     private val keyguardInteractor: KeyguardInteractor,
     shadeModeInteractor: ShadeModeInteractor,
     deviceEntryBypassInteractor: DeviceEntryBypassInteractor,
+    edithLockscreenMediaInteractor: EdithLockscreenMediaInteractor,
 ) : HydratedActivatable() {
 
     private val isMediaVisibleFlow: Flow<Boolean> =
@@ -58,6 +60,12 @@ constructor(
     val shadeMode: ShadeMode by shadeModeInteractor.shadeMode.hydratedStateOf()
 
     val isDozing: Boolean by keyguardInteractor.isDozing.hydratedStateOf()
+
+    /**
+     * Whether the lock screen media player should use the compact (two-row) style instead of the
+     * default three-row one (the Edith "compact media player" lock screen toggle).
+     */
+    val isCompactMedia: Boolean by edithLockscreenMediaInteractor.isCompact.hydratedStateOf()
 
     fun onSwipeToDismiss() = mediaCarouselInteractor.onSwipeToDismiss()
 

@@ -21,6 +21,7 @@ import com.android.systemui.keyguard.domain.interactor.keyguardInteractor
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.media.controls.domain.pipeline.interactor.mediaCarouselInteractor
 import com.android.systemui.media.remedia.ui.viewmodel.factory.mediaViewModelFactory
+import com.android.systemui.qs.edith.edithLockscreenMediaInteractor
 import com.android.systemui.shade.domain.interactor.shadeModeInteractor
 
 val Kosmos.keyguardMediaViewModelFactory by
@@ -33,6 +34,7 @@ val Kosmos.keyguardMediaViewModelFactory by
                     keyguardInteractor = keyguardInteractor,
                     shadeModeInteractor = shadeModeInteractor,
                     deviceEntryBypassInteractor = deviceEntryBypassInteractor,
+                    edithLockscreenMediaInteractor = edithLockscreenMediaInteractor,
                 )
             }
         }
