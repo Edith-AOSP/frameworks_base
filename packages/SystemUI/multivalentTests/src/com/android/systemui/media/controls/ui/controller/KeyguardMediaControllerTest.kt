@@ -42,6 +42,7 @@ import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.ui.viewmodel.factory.mediaViewModelFactory
 import com.android.systemui.media.remedia.ui.viewmodel.mediaFalsingSystem
 import com.android.systemui.plugins.statusbar.StatusBarStateController
+import com.android.systemui.qs.edith.edithLockscreenMediaInteractor
 import com.android.systemui.statusbar.StatusBarState
 import com.android.systemui.statusbar.SysuiStatusBarStateController
 import com.android.systemui.statusbar.notification.stack.MediaContainerView
@@ -122,6 +123,7 @@ class KeyguardMediaControllerTest : SysuiTestCase() {
                 mediaViewModelFactory,
                 kosmos.mediaCarouselInteractor,
                 mediaFalsingSystem,
+                kosmos.edithLockscreenMediaInteractor,
             )
         keyguardMediaController.attachSinglePaneContainer(mediaContainerView)
         keyguardMediaController.useSplitShade = false

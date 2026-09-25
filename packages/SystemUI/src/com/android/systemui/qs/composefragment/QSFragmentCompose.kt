@@ -106,6 +106,7 @@ import com.android.compose.animation.scene.rememberMutableSceneTransitionLayoutS
 import com.android.compose.animation.scene.transitions
 import com.android.compose.gesture.gesturesDisabled
 import com.android.compose.modifiers.height
+import androidx.compose.foundation.layout.height as staticHeight
 import com.android.compose.modifiers.padding
 import com.android.compose.modifiers.thenIf
 import com.android.compose.theme.PlatformTheme
@@ -756,7 +757,7 @@ constructor(
                                 modifier = Modifier.requiredHeightIn(max = Dp.Infinity),
                                 mediaHost = viewModel.qqsMediaHost,
                                 mediaPresentationStyle =
-                                    if (viewModel.qqsMediaInRow) {
+                                    if (viewModel.compactMediaInQs || viewModel.qqsMediaInRow) {
                                         MediaPresentationStyle.Compressed
                                     } else {
                                         MediaPresentationStyle.Default
@@ -767,6 +768,9 @@ constructor(
                                 visible = isListening,
                                 location = Media.Location.SHADE,
                                 expansion = { viewModel.expansionState.progress },
+                                // Only the stock in-row media is coupled to the panel expansion. The
+                                // Edith compact card is a static two-row card.
+                                animateWithExpansion = viewModel.qqsMediaInRow,
                             )
                         }
                     }
@@ -974,12 +978,22 @@ constructor(
                                     MediaObject(
                                         mediaHost = viewModel.qsMediaHost,
                                         mediaViewModelFactory = viewModel.mediaViewModelFactory,
-                                        mediaPresentationStyle = MediaPresentationStyle.Default,
+                                        mediaPresentationStyle =
+                                            if (
+                                                viewModel.compactMediaInQsInExpanded ||
+                                                    viewModel.qsMediaInRow
+                                            ) {
+                                                MediaPresentationStyle.Compressed
+                                            } else {
+                                                MediaPresentationStyle.Default
+                                            },
                                         onSwipeToDismiss = viewModel::onMediaSwipeToDismiss,
                                         behavior = viewModel.qsMediaUiBehavior,
                                         visible = isListening,
                                         location = Media.Location.QS,
                                         expansion = { viewModel.expansionState.progress },
+                                        // Static compact card unless this is the stock in-row media.
+                                        animateWithExpansion = viewModel.qsMediaInRow,
                                     )
                                 }
                             }
@@ -1513,14 +1527,26 @@ private fun ContentScope.MediaObject(
     visible: () -> Boolean,
     location: Media.Location,
     expansion: () -> Float,
+    animateWithExpansion: Boolean,
 ) {
     if (MediaControlsInComposeFlag.isEnabled) {
         Element(
             key = Media.Elements.MediaCarousel,
             modifier =
                 modifier.thenIf(mediaPresentationStyle == MediaPresentationStyle.Compressed) {
-                    Modifier.height {
-                        lerp(Media.COMPRESSED_HEIGHT, Media.DEFAULT_HEIGHT, expansion()).roundToPx()
+                    if (animateWithExpansion) {
+                        // Stock in-row media: the card height is tied to the panel expansion so it
+                        // morphs between the QQS and expanded-QS rows.
+                        Modifier.height {
+                            lerp(Media.COMPRESSED_HEIGHT, Media.DEFAULT_HEIGHT, expansion())
+                                .roundToPx()
+                        }
+                    } else {
+                        // Edith compact media: a static two-row card, deliberately NOT coupled to
+                        // the panel expansion. Coupling the height to `expansion()` while the card
+                        // sits in the QQS `Column` (own row) made the panel height change with the
+                        // drag and fight the collapse gesture.
+                        Modifier.staticHeight(Media.COMPRESSED_HEIGHT)
                     }
                 },
         ) {
@@ -1533,6 +1559,7 @@ private fun ContentScope.MediaObject(
                 visible = visible,
                 location = location,
                 expansion = expansion,
+                animateWithExpansion = animateWithExpansion,
             )
         }
     } else {

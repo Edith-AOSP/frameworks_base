@@ -61,6 +61,7 @@ import com.android.systemui.qs.composefragment.dagger.QSFragmentComposeLog
 import com.android.systemui.qs.composefragment.dagger.QSFragmentComposeModule
 import com.android.systemui.qs.edith.EdithQsStyleInteractor
 import com.android.systemui.qs.edith.EdithQsColorInteractor
+import com.android.systemui.qs.edith.EdithMediaInQsInteractor
 import com.android.systemui.qs.edith.QuickActionsEditViewModel
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsViewModel
 import com.android.systemui.qs.panels.domain.interactor.TileSquishinessInteractor
@@ -110,6 +111,7 @@ constructor(
     val quickActionsEditViewModel: QuickActionsEditViewModel,
     private val edithQsStyleInteractor: EdithQsStyleInteractor,
     private val edithQsColorInteractor: EdithQsColorInteractor,
+    private val edithMediaInQsInteractor: EdithMediaInQsInteractor,
     audioStreamSliderViewModelFactory: AudioStreamSliderViewModel.Factory,
     footerActionsViewModelFactory: FooterActionsViewModel.Factory,
     private val footerActionsController: FooterActionsController,
@@ -393,6 +395,30 @@ constructor(
 
     val qsMediaInRow: Boolean
         get() = qsMediaInRowViewModel.shouldMediaShowInRow
+
+    /**
+     * Whether the compact (two-row) media player is enabled for Quick Quick Settings (the
+     * "Enable compact media player in QQS and Expanded QS" or "... in QQS" Edith modes). When
+     * `false`, QQS keeps the stock media style.
+     */
+    val compactMediaInQs by
+        hydrator.hydratedStateOf(
+            traceName = "compactMediaInQs",
+            initialValue = false,
+            source = edithMediaInQsInteractor.isEnabled,
+        )
+
+    /**
+     * Whether the compact (two-row) media player should also be forced in the expanded QS panel
+     * (only the "Enable compact media player in QQS and Expanded QS" Edith mode). When `false`, the
+     * expanded panel keeps the stock media style.
+     */
+    val compactMediaInQsInExpanded by
+        hydrator.hydratedStateOf(
+            traceName = "compactMediaInQsInExpanded",
+            initialValue = false,
+            source = edithMediaInQsInteractor.isAlways,
+        )
 
     var shouldUpdateSquishinessOnMedia by mutableStateOf(false)
 

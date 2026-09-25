@@ -28,6 +28,8 @@ import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.qs.composefragment.dagger.QSFragmentComposeModule
+import com.android.systemui.qs.edith.EdithMediaInQsInteractor
+import com.android.systemui.qs.edith.EdithMediaInQsRepository.Companion.MODE_DISABLED
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeModeInteractor
 import com.android.systemui.shade.shared.model.ShadeMode
@@ -54,12 +56,40 @@ constructor(
     private val mediaHostStatesManager: MediaHostStatesManager,
     @Named(QSFragmentComposeModule.QS_USING_MEDIA_PLAYER) private val usingMedia: Boolean,
     mediaCarouselInteractor: MediaCarouselInteractor,
+    edithMediaInQsInteractor: EdithMediaInQsInteractor,
     @Assisted @MediaLocation private val inLocation: Int,
     @Assisted private val mediaUiBehavior: MediaUiBehavior,
 ) : HydratedActivatable(traceName = "MediaInRowInLandscapeViewModel - $inLocation") {
 
+    /**
+     * The Edith "compact media player in Quick Settings" mode:
+     * - `MODE_ALWAYS` / `MODE_DYNAMIC`: the compact (two-row) player is shown full-width on its own
+     *   row, so it is never placed in a row with the tiles (return `false`).
+     * - `MODE_DISABLED` (stock): the stock behavior, but additionally gated to **large screens** so
+     *   a phone in landscape never shows the media beside the tiles.
+     */
+    private val edithMode: Int by edithMediaInQsInteractor.mode.hydratedStateOf()
+
     val shouldMediaShowInRow: Boolean
-        get() = usingMedia && inSingleShade && isLandscapeAndLong && isMediaVisible
+        get() =
+            when (edithMode) {
+                // The stock condition (`isLandscapeAndLong`) is true for *any* phone in landscape
+                // (phones are `SCREENLAYOUT_LONG_YES` in landscape), which put the media beside the
+                // tiles and made the QQS<->QS layout/height churn. Require a genuinely large screen
+                // (tablet: smallest width >= 600dp) so phones always keep the media on its own row.
+                MODE_DISABLED ->
+                    usingMedia &&
+                        inSingleShade &&
+                        isLandscapeAndLong &&
+                        isLargeScreen &&
+                        isMediaVisible
+                else -> false
+            }
+
+    private val isLargeScreen: Boolean by
+        configurationInteractor.configurationValues
+            .map { it.smallestScreenWidthDp >= 600 }
+            .hydratedStateOf(initialValue = resources.configuration.smallestScreenWidthDp >= 600)
 
     private val inSingleShade: Boolean by
         shadeModeInteractor.shadeMode

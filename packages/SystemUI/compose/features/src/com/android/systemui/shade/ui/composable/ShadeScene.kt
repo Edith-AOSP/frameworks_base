@@ -420,6 +420,8 @@ private fun ContentScope.SingleShade(
                                         behavior = ShadeSceneContentViewModel.qqsMediaUiBehavior,
                                         onDismissed = viewModel::onMediaSwipeToDismiss,
                                         location = Media.Location.SHADE,
+                                        // Static compact card (not coupled to panel expansion).
+                                        animateWithExpansion = false,
                                     )
                                 }
                             }

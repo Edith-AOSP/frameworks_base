@@ -36,6 +36,9 @@ import com.android.systemui.media.remedia.data.repository.setHasMedia
 import com.android.systemui.media.remedia.shared.flag.MediaControlsInComposeFlag
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.qs.composefragment.dagger.usingMediaInComposeFragment
+import com.android.systemui.qs.edith.EdithMediaInQsRepository.Companion.MODE_DISABLED
+import com.android.systemui.qs.edith.EdithMediaInQsRepository.Companion.MODE_DYNAMIC
+import com.android.systemui.qs.edith.setEdithMediaInQsMode
 import com.android.systemui.qs.ui.viewmodel.QuickSettingsContainerViewModel
 import com.android.systemui.shade.domain.interactor.enableDualShade
 import com.android.systemui.shade.domain.interactor.enableSingleShade
@@ -94,7 +97,46 @@ class MediaInRowInLandscapeViewModelTest(
             ShadeMode.Split -> kosmos.enableSplitShade()
             ShadeMode.Dual -> kosmos.enableDualShade()
         }
+
+        // `shouldMediaShowInRow` below asserts the stock (in-row) behavior, which the Edith
+        // compact-media-player modes suppress. Use MODE_DISABLED so the stock condition applies.
+        kosmos.setEdithMediaInQsMode(MODE_DISABLED)
     }
+
+    /**
+     * When the compact media player is enabled (Always on or Dynamic), the media is always shown on
+     * its own row, never in a row with the tiles, even where the stock condition would otherwise
+     * place it in-row.
+     */
+    @Test
+    fun shouldMediaShowInRow_compactMode_neverInRow() =
+        with(kosmos) {
+            testScope.runTest {
+                // Override the MODE_DISABLED set in setUp with a compact mode.
+                setEdithMediaInQsMode(MODE_DYNAMIC)
+                underTest.activateIn(testScope)
+
+                val config =
+                    Configuration(mainResources.configuration).apply {
+                        orientation = Configuration.ORIENTATION_LANDSCAPE
+                        screenLayout = Configuration.SCREENLAYOUT_LONG_YES
+                    }
+                enableSingleShade()
+                fakeConfigurationRepository.onConfigurationChange(config)
+                mainResources.configuration.updateFrom(config)
+                if (MediaControlsInComposeFlag.isEnabled) {
+                    setHasMedia(true)
+                } else {
+                    mediaHostStatesManager.updateHostState(
+                        testData.mediaLocation,
+                        MediaHost.MediaHostStateHolder().apply { visible = true },
+                    )
+                    runCurrent()
+                }
+
+                assertThat(underTest.shouldMediaShowInRow).isFalse()
+            }
+        }
 
     @Test
     fun shouldMediaShowInRow() =
@@ -106,6 +148,10 @@ class MediaInRowInLandscapeViewModelTest(
                     Configuration(mainResources.configuration).apply {
                         orientation = testData.orientation
                         screenLayout = testData.screenLayoutLong
+                        // `shouldMediaShowInRow` now additionally requires a large screen
+                        // (smallest width >= 600dp) for the stock in-row behavior; these tests
+                        // assert the stock condition, so simulate a large screen.
+                        smallestScreenWidthDp = 600
                     }
                 fakeConfigurationRepository.onConfigurationChange(config)
                 mainResources.configuration.updateFrom(config)

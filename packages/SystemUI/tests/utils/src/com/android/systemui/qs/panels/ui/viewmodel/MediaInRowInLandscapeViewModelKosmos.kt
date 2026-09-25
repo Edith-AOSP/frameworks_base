@@ -27,6 +27,7 @@ import com.android.systemui.media.controls.domain.pipeline.interactor.mediaCarou
 import com.android.systemui.media.controls.ui.controller.mediaHostStatesManager
 import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.qs.composefragment.dagger.usingMediaInComposeFragment
+import com.android.systemui.qs.edith.edithMediaInQsInteractor
 import com.android.systemui.res.R
 import com.android.systemui.shade.domain.interactor.shadeModeInteractor
 
@@ -44,6 +45,7 @@ val Kosmos.mediaInRowInLandscapeViewModelFactory by
                     mediaHostStatesManager,
                     usingMediaInComposeFragment,
                     mediaCarouselInteractor,
+                    edithMediaInQsInteractor,
                     inLocation,
                     mediaUiBehavior,
                 )
