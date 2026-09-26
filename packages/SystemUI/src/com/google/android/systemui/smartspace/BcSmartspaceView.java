@@ -361,11 +361,15 @@ public class BcSmartspaceView extends FrameLayout
         try {
             mBgHandler.post(
                     () -> {
+                        // Observe the current user only. This setting is read back for
+                        // getContext().getUserId() in onBackgroundToggled(), and registering for
+                        // USER_ALL would require INTERACT_ACROSS_USERS_FULL, which the Launcher
+                        // (a non-platform-signed app that also inflates this view) does not hold.
                         resolver.registerContentObserver(
                                 Settings.Secure.getUriFor("smartspace_settings_background"),
                                 false,
                                 mBackgroundToggleObserver,
-                                -1);
+                                getContext().getUserId());
                     });
         } catch (Exception e) {
             Log.w(
