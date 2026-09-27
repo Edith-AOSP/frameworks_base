@@ -114,6 +114,7 @@ fun Kosmos.disableDualShade(disabledBySetting: Boolean = true) {
 }
 
 fun Kosmos.enableSingleShade(wideLayout: Boolean = false) {
+    setEdithQsStyle(false)
     disableDualShade()
     overrideLargeScreenResources(isLargeScreen = wideLayout)
     overrideResource(R.bool.config_use_split_notification_shade, false)
@@ -126,6 +127,7 @@ fun Kosmos.enableSplitShade() {
     check(!DualShadeFlag.isEnabled) {
         "Split Shade not supported when ${DualShadeFlag.FLAG_NAME} is enabled."
     }
+    setEdithQsStyle(false)
     disableDualShade()
     overrideLargeScreenResources(isLargeScreen = true)
     displayStateRepository.setIsWideScreen(true)

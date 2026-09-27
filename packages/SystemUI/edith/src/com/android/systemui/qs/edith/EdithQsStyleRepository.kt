@@ -40,10 +40,10 @@ constructor(
     @Background private val backgroundDispatcher: CoroutineDispatcher,
     secureSettingsRepository: SecureSettingsRepository,
 ) {
-    /** Whether the Edith Quick Settings style is enabled. Disabled by default. */
+    /** Whether the Edith Quick Settings style is enabled. Enabled by default. */
     val isEnabled: Flow<Boolean> =
         secureSettingsRepository
-            .boolSetting(SETTING_NAME, defaultValue = false)
+            .boolSetting(SETTING_NAME, defaultValue = true)
             .distinctUntilChanged()
             .flowOn(backgroundDispatcher)
 

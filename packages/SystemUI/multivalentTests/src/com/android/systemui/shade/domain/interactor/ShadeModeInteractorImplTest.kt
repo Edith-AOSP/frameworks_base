@@ -262,4 +262,28 @@ class ShadeModeInteractorImplTest : SysuiTestCase() {
 
             assertThat(alignment).isEqualTo(Alignment.Start)
         }
+
+    @Test
+    @EnableFlags(FLAG_DUAL_SHADE)
+    fun edithStyle_landscape_usesSplitShade() =
+        kosmos.runTest {
+            val shadeMode by collectLastValue(underTest.shadeMode)
+            enableEdithStyle()
+            overrideResource(R.bool.config_use_split_notification_shade, true)
+            fakeConfigurationRepository.onConfigurationChange()
+
+            assertThat(shadeMode).isEqualTo(ShadeMode.Split)
+        }
+
+    @Test
+    @EnableFlags(FLAG_DUAL_SHADE)
+    fun edithStyle_portrait_usesSingleShade() =
+        kosmos.runTest {
+            val shadeMode by collectLastValue(underTest.shadeMode)
+            enableEdithStyle()
+            overrideResource(R.bool.config_use_split_notification_shade, false)
+            fakeConfigurationRepository.onConfigurationChange()
+
+            assertThat(shadeMode).isEqualTo(ShadeMode.Single)
+        }
 }
