@@ -96,6 +96,10 @@ constructor(
 
     val shadeMode: ShadeMode by shadeModeInteractor.shadeMode.hydratedStateOf()
 
+    /** Container view model for the Quick Settings content shown in the shade (QQS + Edith state). */
+    val qsContainerViewModel =
+        qsContainerViewModelFactory.create(supportsBrightnessMirroring = true)
+
     val isDeviceEntered: Boolean by deviceEntryInteractor.isDeviceEntered.hydratedStateOf()
 
     fun isEmptySpaceClickable(transitionState: TransitionState): Boolean {
@@ -136,7 +140,10 @@ constructor(
         mediaInRowInLandscapeViewModelFactory.create(LOCATION_QQS, qqsMediaUiBehavior)
 
     override suspend fun onActivated() {
-        coroutineScope { launch { qqsMediaInRowViewModel.activate() } }
+        coroutineScope {
+            launch { qqsMediaInRowViewModel.activate() }
+            launch { qsContainerViewModel.activate() }
+        }
     }
 
     /**

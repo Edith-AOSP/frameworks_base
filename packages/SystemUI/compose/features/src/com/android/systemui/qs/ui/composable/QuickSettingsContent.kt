@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,19 +34,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.dimensionResource
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.compose.PlatformSliderDefaults
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.gesture.gesturesDisabled
 import com.android.compose.modifiers.thenIf
+import com.android.compose.theme.PlatformTheme
 import com.android.systemui.brightness.ui.compose.BrightnessSliderContainer
 import com.android.systemui.brightness.ui.compose.ContainerColors
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.media.remedia.ui.compose.Media
 import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.qs.composefragment.ui.GridAnchor
+import com.android.systemui.qs.panels.ui.compose.QuickActionsGrid
 import com.android.systemui.qs.panels.ui.compose.TileGrid
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.ui.viewmodel.QuickSettingsContainerViewModel
 import com.android.systemui.res.R
+import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSlider
 import kotlinx.coroutines.flow.filterNotNull
 
 @Composable
@@ -56,6 +62,24 @@ fun ContentScope.QuickSettingsContent(
     mediaSquishiness: () -> Float = { 1f },
 ) {
     QuickSettingsPanelLayout(
+        quickActions =
+            @Composable {
+                if (viewModel.edithStyleEnabled) {
+                    var listening by remember { mutableStateOf(false) }
+                    LifecycleStartEffect(Unit) {
+                        listening = true
+                        onStopOrDispose { listening = false }
+                    }
+                    QuickActionsGrid(
+                        viewModel = viewModel.quickActionsGridViewModel,
+                        modifier = Modifier.fillMaxWidth(),
+                        listening = { listening },
+                        edithTileStyle = viewModel.edithStyleEnabled,
+                        edithColorEnabled = viewModel.edithColorEnabled,
+                        edithQuickActionsOverride = viewModel.edithQuickActionsOverride,
+                    )
+                }
+            },
         brightness =
             @Composable {
                 if (viewModel.isBrightnessSliderVisible) {
@@ -85,6 +109,33 @@ fun ContentScope.QuickSettingsContent(
                     }
                 }
             },
+        volume =
+            @Composable {
+                if (viewModel.edithStyleEnabled) {
+                    val volumeSliderViewModel = viewModel.volumeSliderViewModel
+                    val volumeSliderState by
+                        volumeSliderViewModel.slider.collectAsStateWithLifecycle()
+                    PlatformTheme {
+                        VolumeSlider(
+                            modifier = Modifier.fillMaxWidth(),
+                            showLabel = false,
+                            state = volumeSliderState,
+                            onValueChange = { newValue: Float ->
+                                volumeSliderViewModel.onValueChanged(volumeSliderState, newValue)
+                            },
+                            onValueChangeFinished = {
+                                volumeSliderViewModel.onValueChangeFinished()
+                            },
+                            onIconTapped = { volumeSliderViewModel.toggleMuted(volumeSliderState) },
+                            sliderColors =
+                                PlatformSliderDefaults.defaultPlatformSliderColors(),
+                            hapticsViewModelFactory =
+                                volumeSliderViewModel.getSliderHapticsViewModelFactory(),
+                            dimensions = QuickSettingsShade.Dimensions.VolumeSliderDimensions,
+                        )
+                    }
+                }
+            },
         tiles =
             @Composable {
                 var listening by remember { mutableStateOf(false) }
@@ -109,11 +160,18 @@ fun ContentScope.QuickSettingsContent(
                     Element(key = Media.Elements.MediaCarousel, modifier = Modifier) {
                         Media(
                             viewModelFactory = viewModel.mediaViewModelFactory,
-                            presentationStyle = MediaPresentationStyle.Default,
+                            presentationStyle =
+                                if (viewModel.compactMediaInQsInExpanded || mediaInRow) {
+                                    MediaPresentationStyle.Compressed
+                                } else {
+                                    MediaPresentationStyle.Default
+                                },
                             behavior = QuickSettingsContainerViewModel.mediaUiBehavior,
                             onDismissed = viewModel::onMediaSwipeToDismiss,
                             mediaSquishiness = mediaSquishiness,
                             location = Media.Location.QS,
+                            // Static compact card unless this is the stock in-row media.
+                            animateWithExpansion = mediaInRow,
                         )
                     }
                 } else {
@@ -133,7 +191,9 @@ fun ContentScope.QuickSettingsContent(
 
 @Composable
 private fun QuickSettingsPanelLayout(
+    quickActions: @Composable () -> Unit,
     brightness: @Composable () -> Unit,
+    volume: @Composable () -> Unit,
     tiles: @Composable () -> Unit,
     media: @Composable () -> Unit,
     mediaInRow: Boolean,
@@ -145,7 +205,9 @@ private fun QuickSettingsPanelLayout(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier,
         ) {
+            quickActions()
             brightness()
+            volume()
             Row(
                 horizontalArrangement = spacedBy(QuickSettingsShade.Dimensions.HorizontalPadding),
                 verticalAlignment = Alignment.CenterVertically,
@@ -160,7 +222,9 @@ private fun QuickSettingsPanelLayout(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier,
         ) {
+            quickActions()
             brightness()
+            volume()
             tiles()
             media()
         }

@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.log.table.TableLogBuffer
 import com.android.systemui.log.table.logDiffsForTable
+import com.android.systemui.qs.edith.EdithQsStyleInteractor
 import com.android.systemui.scene.domain.SceneFrameworkTableLog
 import com.android.systemui.shade.data.repository.ShadeConfigRepository
 import com.android.systemui.shade.shared.flag.DualShadeFlag
@@ -81,7 +82,15 @@ constructor(
     @Background applicationScope: CoroutineScope,
     private val shadeConfigRepository: ShadeConfigRepository,
     @SceneFrameworkTableLog private val tableLogBuffer: TableLogBuffer,
+    edithQsStyleInteractor: EdithQsStyleInteractor,
 ) : ShadeModeInteractor {
+
+    /**
+     * Whether the EdithUI Quick Settings style is enabled. When it is, the shade uses the
+     * scene-native Split layout in landscape (QS pane + notifications pane) instead of the forced
+     * single/dual-shade modes, so no Dual Shade flag is needed.
+     */
+    private val edithStyleEnabled: StateFlow<Boolean> = edithQsStyleInteractor.isEnabled
 
     private val isDualShadeEnabled: StateFlow<Boolean> =
         if (DualShadeFlag.isEnabled) {
@@ -117,15 +126,23 @@ constructor(
 
     override val isFullWidthShade: StateFlow<Boolean> =
         if (DualShadeFlag.isEnabled) {
-                isDualShadeEnabled.flatMapLatest { isDualShadeEnabled ->
-                    if (isDualShadeEnabled) {
-                        // Dual Shade should be shown
-                        Log.d(TAG, "Shade layout is derived from the Dual Shade config")
-                        shadeConfigRepository.isFullWidthShade
+                edithStyleEnabled.flatMapLatest { edithEnabled ->
+                    if (edithEnabled) {
+                        // EdithUI: derive the layout from the (landscape) split config.
+                        Log.d(TAG, "Edith style: shade layout is derived from the legacy config")
+                        shadeConfigRepository.legacyUseSplitShade.map { !it }
                     } else {
-                        // Single shade should be shown
-                        Log.d(TAG, "Single shade is always full-width")
-                        flowOf(true)
+                        isDualShadeEnabled.flatMapLatest { isDualShadeEnabled ->
+                            if (isDualShadeEnabled) {
+                                // Dual Shade should be shown
+                                Log.d(TAG, "Shade layout is derived from the Dual Shade config")
+                                shadeConfigRepository.isFullWidthShade
+                            } else {
+                                // Single shade should be shown
+                                Log.d(TAG, "Single shade is always full-width")
+                                flowOf(true)
+                            }
+                        }
                     }
                 }
             } else {
@@ -148,18 +165,20 @@ constructor(
             determineShadeMode(
                 isDualShadeEnabled = isDualShadeEnabled.value,
                 isFullWidthShade = isFullWidthShade.value,
+                edithStyleEnabled = edithStyleEnabled.value,
             )
 
     override val shadeMode: StateFlow<ShadeMode> =
-        combine(isDualShadeEnabled, isFullWidthShade, ::determineShadeMode)
+        combine(isDualShadeEnabled, isFullWidthShade, edithStyleEnabled, ::determineShadeMode)
             .logDiffsForTable(tableLogBuffer = tableLogBuffer, initialValue = shadeModeInitialValue)
             .stateIn(applicationScope, SharingStarted.Eagerly, initialValue = shadeModeInitialValue)
 
     private fun determineShadeMode(
         isDualShadeEnabled: Boolean,
         isFullWidthShade: Boolean,
+        edithStyleEnabled: Boolean,
     ): ShadeMode {
-        return if (DualShadeFlag.isEnabled) {
+        return if (DualShadeFlag.isEnabled && !edithStyleEnabled) {
             if (isDualShadeEnabled) ShadeMode.Dual else ShadeMode.Single
         } else {
             if (isFullWidthShade) ShadeMode.Single else ShadeMode.Split
