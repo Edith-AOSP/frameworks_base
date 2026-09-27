@@ -25,6 +25,8 @@ import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.kosmos.Kosmos.Fixture
 import com.android.systemui.kosmos.applicationCoroutineScope
 import com.android.systemui.log.table.logcatTableLogBuffer
+import com.android.systemui.qs.edith.edithQsStyleInteractor
+import com.android.systemui.qs.edith.setEdithQsStyle
 import com.android.systemui.res.R
 import com.android.systemui.shade.data.repository.shadeConfigRepository
 import com.android.systemui.shade.shared.flag.DualShadeFlag
@@ -39,6 +41,7 @@ val Kosmos.shadeModeInteractor by Fixture {
         applicationScope = applicationCoroutineScope,
         shadeConfigRepository = shadeConfigRepository,
         tableLogBuffer = logcatTableLogBuffer(this, "sceneFrameworkTableLogBuffer"),
+        edithQsStyleInteractor = edithQsStyleInteractor,
     )
 }
 
@@ -127,6 +130,14 @@ fun Kosmos.enableSplitShade() {
     overrideLargeScreenResources(isLargeScreen = true)
     displayStateRepository.setIsWideScreen(true)
     displayStateRepository.setIsLargeScreen(true)
+}
+
+/**
+ * Enables the EdithUI style. In this mode the shade uses the scene-native Split layout (from the
+ * legacy split config) regardless of the Dual Shade flag.
+ */
+fun Kosmos.enableEdithStyle() {
+    setEdithQsStyle(true)
 }
 
 private fun Kosmos.overrideLargeScreenResources(isLargeScreen: Boolean) {

@@ -40,6 +40,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,6 +59,7 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.window.core.layout.WindowSizeClass
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.SceneKey
@@ -83,11 +85,15 @@ import com.android.systemui.notifications.intelligence.rules.ui.viewmodel.Notifi
 import com.android.systemui.notifications.ui.composable.HeadsUpNotificationPlaceholder
 import com.android.systemui.notifications.ui.composable.ScrollingNotificationPanel
 import com.android.systemui.qs.composefragment.ui.GridAnchor
+import com.android.systemui.qs.edith.EditZone
+import com.android.systemui.qs.edith.EdithEditLanding
+import com.android.systemui.qs.edith.QuickActionsEdit
 import com.android.systemui.qs.footer.ui.compose.FooterActionsWithAnimatedVisibility
 import com.android.systemui.qs.panels.ui.compose.EditMode
 import com.android.systemui.qs.shared.ui.QuickSettings
 import com.android.systemui.qs.ui.composable.QuickSettingsScene.Companion.InternalScenes.Edit
 import com.android.systemui.qs.ui.composable.QuickSettingsScene.Companion.InternalScenes.QS
+import com.android.systemui.qs.ui.viewmodel.QuickSettingsContainerViewModel
 import com.android.systemui.qs.ui.viewmodel.QuickSettingsSceneContentViewModel
 import com.android.systemui.qs.ui.viewmodel.QuickSettingsUserActionsViewModel
 import com.android.systemui.res.R
@@ -283,14 +289,19 @@ private fun ContentScope.QuickSettingsScene(
             scene(Edit) {
                 Element(Edit.rootElementKey, Modifier) {
                     GridAnchor()
-                    EditMode(
-                        viewModel.qsContainerViewModel.editModeViewModel,
-                        Modifier.testTag("edit_mode_scene")
-                            .padding(horizontal = QuickSettingsShade.Dimensions.HorizontalPadding)
-                            .padding(
-                                top =
-                                    headerViewModel.statusBarHeightPx.toDp(LocalContext.current).dp
-                            ),
+                    EdithEditMode(
+                        containerViewModel = viewModel.qsContainerViewModel,
+                        modifier =
+                            Modifier.testTag("edit_mode_scene")
+                                .padding(
+                                    horizontal = QuickSettingsShade.Dimensions.HorizontalPadding
+                                )
+                                .padding(
+                                    top =
+                                        headerViewModel.statusBarHeightPx
+                                            .toDp(LocalContext.current)
+                                            .dp
+                                ),
                     )
                 }
             }
@@ -446,5 +457,52 @@ private fun ContentScope.QuickSettingsContent(
                         .padding(horizontal = shadeHorizontalPadding),
             )
         }
+    }
+}
+
+/**
+ * The QS edit experience. In the Edith style this is the Quick Actions editor with its own landing
+ * page; otherwise it falls back to the stock tile editor. Shared by the QS scene and the split-shade
+ * QS pane.
+ */
+@Composable
+internal fun ContentScope.EdithEditMode(
+    containerViewModel: QuickSettingsContainerViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val quickActionsEditor = containerViewModel.quickActionsEditViewModel
+    val stopEditing = containerViewModel.editModeViewModel::stopEditing
+    if (containerViewModel.edithStyleEnabled) {
+        LaunchedEffect(Unit) { quickActionsEditor.startEditing() }
+        val zone by quickActionsEditor.zone.collectAsStateWithLifecycle()
+        when (zone) {
+            EditZone.QuickActions -> {
+                QuickActionsEdit(viewModel = quickActionsEditor, modifier = modifier)
+            }
+            EditZone.QsTiles -> {
+                EditMode(
+                    viewModel = containerViewModel.editModeViewModel,
+                    modifier = modifier,
+                    onStopEditing = quickActionsEditor::backToLanding,
+                )
+            }
+            EditZone.Landing,
+            EditZone.None -> {
+                val specs by quickActionsEditor.currentSpecs.collectAsStateWithLifecycle()
+                EdithEditLanding(
+                    quickActionsGridViewModel = containerViewModel.quickActionsGridViewModel,
+                    quickActionsSpecs = specs,
+                    qsTiles = containerViewModel.tileGridViewModel.tileViewModels,
+                    onEditQuickActions = { quickActionsEditor.openZone(EditZone.QuickActions) },
+                    onEditQsTiles = { quickActionsEditor.openZone(EditZone.QsTiles) },
+                    onReset = { quickActionsEditor.showResetDialog() },
+                    onStopEditing = stopEditing,
+                    modifier = modifier,
+                    edithColorEnabled = containerViewModel.edithColorEnabled,
+                )
+            }
+        }
+    } else {
+        EditMode(viewModel = containerViewModel.editModeViewModel, modifier = modifier)
     }
 }

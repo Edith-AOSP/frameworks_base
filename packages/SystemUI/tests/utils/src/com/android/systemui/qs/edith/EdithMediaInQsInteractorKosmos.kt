@@ -18,18 +18,19 @@ package com.android.systemui.qs.edith
 
 import com.android.systemui.kosmos.Kosmos
 import com.android.systemui.kosmos.backgroundScope
+import com.android.systemui.kosmos.testDispatcher
 import com.android.systemui.qs.edith.EdithMediaInQsRepository.Companion.MODE_DYNAMIC
 import com.android.systemui.shared.settings.data.repository.secureSettingsRepository
 import kotlinx.coroutines.runBlocking
 
 val Kosmos.edithMediaInQsRepository by
-    Kosmos.Fixture { EdithMediaInQsRepository(backgroundScope, secureSettingsRepository) }
+    Kosmos.Fixture { EdithMediaInQsRepository(testDispatcher, secureSettingsRepository) }
 
 val Kosmos.edithMediaInQsInteractor by
     Kosmos.Fixture { EdithMediaInQsInteractor(backgroundScope, edithMediaInQsRepository) }
 
 val Kosmos.edithLockscreenMediaRepository by
-    Kosmos.Fixture { EdithLockscreenMediaRepository(backgroundScope, secureSettingsRepository) }
+    Kosmos.Fixture { EdithLockscreenMediaRepository(testDispatcher, secureSettingsRepository) }
 
 val Kosmos.edithLockscreenMediaInteractor by
     Kosmos.Fixture {

@@ -98,10 +98,11 @@ import com.android.systemui.notifications.ui.composable.NestedScrollingNotificat
 import com.android.systemui.notifications.ui.composable.ScrollingNotificationPanel
 import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.footer.ui.compose.FooterActionsWithAnimatedVisibility
-import com.android.systemui.qs.panels.ui.compose.EditMode
+import com.android.systemui.qs.panels.ui.compose.QuickActionsGrid
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
 import com.android.systemui.qs.shared.ui.QuickSettings
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.SplitShadeQuickSettings
+import com.android.systemui.qs.ui.composable.EdithEditMode
 import com.android.systemui.qs.ui.composable.QuickSettingsContent
 import com.android.systemui.qs.ui.composable.QuickSettingsShade
 import com.android.systemui.res.R
@@ -380,6 +381,26 @@ private fun ContentScope.SingleShade(
                             }
                             .padding(bottom = qqsLayoutPaddingBottom)
                             .padding(horizontal = qsHorizontalMargin),
+                    quickActions =
+                        @Composable {
+                            if (viewModel.qsContainerViewModel.edithStyleEnabled) {
+                                var listening by remember { mutableStateOf(false) }
+                                LifecycleStartEffect(Unit) {
+                                    listening = true
+
+                                    onStopOrDispose { listening = false }
+                                }
+                                QuickActionsGrid(
+                                    viewModel = viewModel.qsContainerViewModel.quickActionsGridViewModel,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    listening = { listening },
+                                    edithTileStyle = viewModel.qsContainerViewModel.edithStyleEnabled,
+                                    edithColorEnabled = viewModel.qsContainerViewModel.edithColorEnabled,
+                                    edithQuickActionsOverride =
+                                        viewModel.qsContainerViewModel.edithQuickActionsOverride,
+                                )
+                            }
+                        },
                     tiles =
                         @Composable {
                             // Because the ShadeScene is always composed, we need to manually tell
@@ -391,17 +412,26 @@ private fun ContentScope.SingleShade(
 
                                 onStopOrDispose { listening = false }
                             }
-                            Box {
-                                val qqsViewModel =
-                                    rememberViewModel(traceName = "shade_scene_qqs") {
-                                        viewModel.quickQuickSettingsViewModel.create()
+                            // In the Edith style, QQS shows only the Quick Actions grid (plus media).
+                            if (!viewModel.qsContainerViewModel.edithStyleEnabled) {
+                                Box {
+                                    val qqsViewModel =
+                                        rememberViewModel(traceName = "shade_scene_qqs") {
+                                            viewModel.quickQuickSettingsViewModel.create()
+                                        }
+                                    if (viewModel.isQsEnabled) {
+                                        QuickQuickSettings(
+                                            qqsViewModel,
+                                            listening = { listening },
+                                            modifier = Modifier.sysuiResTag("quick_qs_panel"),
+                                            edithTileStyle =
+                                                viewModel.qsContainerViewModel.edithStyleEnabled,
+                                            edithColorEnabled =
+                                                viewModel.qsContainerViewModel.edithColorEnabled,
+                                            edithTileColorOverride =
+                                                viewModel.qsContainerViewModel.edithTileColorOverride,
+                                        )
                                     }
-                                if (viewModel.isQsEnabled) {
-                                    QuickQuickSettings(
-                                        qqsViewModel,
-                                        listening = { listening },
-                                        modifier = Modifier.sysuiResTag("quick_qs_panel"),
-                                    )
                                 }
                             }
                         },
@@ -412,7 +442,10 @@ private fun ContentScope.SingleShade(
                                     Media(
                                         viewModelFactory = viewModel.mediaViewModelFactory,
                                         presentationStyle =
-                                            if (mediaInRow) {
+                                            if (
+                                                mediaInRow ||
+                                                    viewModel.qsContainerViewModel.compactMediaInQs
+                                            ) {
                                                 MediaPresentationStyle.Compressed
                                             } else {
                                                 MediaPresentationStyle.Default
@@ -478,6 +511,7 @@ private fun ContentScope.SingleShade(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun MediaAndQqsLayout(
+    quickActions: @Composable () -> Unit,
     tiles: @Composable () -> Unit,
     media: @Composable () -> Unit,
     mediaInRow: Boolean,
@@ -491,11 +525,18 @@ private fun MediaAndQqsLayout(
             horizontalArrangement = spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.weight(1f)) { tiles() }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical)),
+            ) {
+                quickActions()
+                tiles()
+            }
             Box(modifier = Modifier.weight(1f)) { media() }
         }
     } else {
         Column(modifier = modifierAnimated, verticalArrangement = spacedBy(16.dp)) {
+            quickActions()
             tiles()
             media()
         }
@@ -520,10 +561,9 @@ private fun ContentScope.SplitShade(
     val footerActionsViewModel =
         remember(lifecycleOwner, viewModel) { viewModel.getFooterActionsViewModel(lifecycleOwner) }
 
-    val qsContainerViewModel =
-        rememberViewModel(traceName = "SplitShade.QSContainerViewModel") {
-            viewModel.qsContainerViewModelFactory.create(supportsBrightnessMirroring = true)
-        }
+    // Reuse the shade scene's container view model so the QS pane, the Edith state and the editor
+    // all share a single instance.
+    val qsContainerViewModel = viewModel.qsContainerViewModel
 
     val notificationStackPadding = dimensionResource(id = R.dimen.notification_side_paddings_split)
     val navBarBottomHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -666,13 +706,15 @@ private fun ContentScope.SplitShade(
                             scene(Edit) {
                                 Element(Edit.rootElementKey, Modifier) {
                                     GridAnchor()
-                                    EditMode(
-                                        qsContainerViewModel.editModeViewModel,
-                                        Modifier.testTag("edit_mode_scene")
-                                            .padding(
-                                                horizontal =
-                                                    QuickSettingsShade.Dimensions.HorizontalPadding
-                                            ),
+                                    EdithEditMode(
+                                        containerViewModel = qsContainerViewModel,
+                                        modifier =
+                                            Modifier.testTag("edit_mode_scene")
+                                                .padding(
+                                                    horizontal =
+                                                        QuickSettingsShade.Dimensions
+                                                            .HorizontalPadding
+                                                ),
                                     )
                                 }
                             }

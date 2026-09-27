@@ -167,6 +167,33 @@ fun ContentScope.QuickSettingsContent(
                     }
                 }
             },
+        volume =
+            @Composable {
+                if (viewModel.edithStyleEnabled) {
+                    val volumeSliderViewModel = viewModel.volumeSliderViewModel
+                    val volumeSliderState by
+                        volumeSliderViewModel.slider.collectAsStateWithLifecycle()
+                    PlatformTheme {
+                        VolumeSlider(
+                            modifier = Modifier.fillMaxWidth(),
+                            showLabel = false,
+                            state = volumeSliderState,
+                            onValueChange = { newValue: Float ->
+                                volumeSliderViewModel.onValueChanged(volumeSliderState, newValue)
+                            },
+                            onValueChangeFinished = {
+                                volumeSliderViewModel.onValueChangeFinished()
+                            },
+                            onIconTapped = { volumeSliderViewModel.toggleMuted(volumeSliderState) },
+                            sliderColors =
+                                PlatformSliderDefaults.defaultPlatformSliderColors(),
+                            hapticsViewModelFactory =
+                                volumeSliderViewModel.getSliderHapticsViewModelFactory(),
+                            dimensions = QuickSettingsShade.Dimensions.VolumeSliderDimensions,
+                        )
+                    }
+                }
+            },
         tiles =
             @Composable {
                 var listening by remember { mutableStateOf(false) }
