@@ -10,7 +10,6 @@ import com.android.compose.animation.scene.ElementMatcher
 import com.android.compose.animation.scene.TransitionBuilder
 import com.android.compose.animation.scene.UserActionDistance
 import com.android.compose.animation.scene.transformation.offsetSharedElementWithAnchor
-import com.android.systemui.media.remedia.ui.compose.Media.Elements.MediaCarousel
 import com.android.systemui.notifications.ui.composable.Notifications
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.shared.ui.QuickSettings.SHARED_TILE_PICKER_THRESHOLD
@@ -48,7 +47,10 @@ fun TransitionBuilder.shadeToQuickSettingsTransition(
     // overlap.
     fractionRange(end = 0.5f) { fade(QqsTileElementMatcher) }
     anchoredTranslate(QqsTileElementMatcher, Elements.GridAnchor)
-    fade(MediaCarousel)
+    // The media card is a shared element that slides from its QQS position to its expanded QS
+    // position with the pull (like the tiles): a single placed copy morphs its position, so no fade
+    // is needed here.
+    sharedElement(Elements.QuickSettingsMedia)
 
     val translationY = ShadeHeader.Dimensions.CollapsedHeightForTransitions
     translate(ShadeHeader.Elements.CollapsedContentStart, y = translationY)

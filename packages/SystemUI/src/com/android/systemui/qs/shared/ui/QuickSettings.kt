@@ -56,6 +56,25 @@ object QuickSettings {
         val QuickActionsElementMatcher = ElementKey.withIdentity { it is QuickActionIdentity }
 
         val QuickQuickSettingsAndMedia = ElementKey("QuickQuickSettingsAndMedia")
+
+        /**
+         * Element key for the media carousel shown in the Quick Settings panel, shared between QQS
+         * (the Shade scene) and the expanded QS panel so the card slides from its QQS position to
+         * its expanded position with the pull (like the tiles).
+         *
+         * This is a real shared element (one placed copy, morphing position) rather than
+         * placeAllCopies: with placeAllCopies each content drew its own static copy, so the card
+         * "slid" but the arriving copy popped in and the content looked gone. A single shared copy
+         * moves continuously from the QQS spot to the expanded spot. The content picker decides
+         * which scene's copy is drawn.
+         */
+        val QuickSettingsMedia =
+            ElementKey(
+                "QuickSettingsMedia",
+                identity = QuickSettingsMediaIdentity,
+                contentPicker = SharedQsMediaContentPicker,
+            )
+
         val SplitShadeQuickSettings = ElementKey("SplitShadeQuickSettings")
     }
 
@@ -100,8 +119,36 @@ object QuickSettings {
             }
         }
     }
+
+    private object SharedQsMediaContentPicker : ElementContentPicker {
+        override fun contentDuringTransition(
+            element: ElementKey,
+            transition: TransitionState.Transition,
+            fromContentZIndex: Long,
+            toContentZIndex: Long,
+        ): ContentKey {
+            return when {
+                transition.isTransitioning(Shade, QuickSettings) &&
+                    transition.progress > 1f - SHARED_TILE_PICKER_THRESHOLD -> QuickSettings
+
+                transition.isTransitioning(QuickSettings, Shade) &&
+                    transition.progress < SHARED_TILE_PICKER_THRESHOLD -> QuickSettings
+
+                else ->
+                    HighestZIndexContentPicker.contentDuringTransition(
+                        element,
+                        transition,
+                        fromContentZIndex,
+                        toContentZIndex,
+                    )
+            }
+        }
+    }
 }
 
 private data class TileIdentity(val spec: TileSpec)
 
 private data class QuickActionIdentity(val spec: TileSpec)
+
+/** Stable identity for the single Quick Settings media card element. */
+private object QuickSettingsMediaIdentity
