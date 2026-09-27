@@ -438,14 +438,19 @@ private fun ContentScope.SingleShade(
                     media = {
                         if (isAlwaysComposedContentVisible()) {
                             if (viewModel.isQsEnabled && viewModel.showMedia) {
-                                Element(key = Media.Elements.MediaCarousel, modifier = Modifier) {
+                                val compactMediaInQs =
+                                    viewModel.qsContainerViewModel.compactMediaInQs
+                                // Shared with the expanded QS media (QuickSettingsMedia) so the card
+                                // slides from its QQS position to its expanded position with the
+                                // pull. The compact mode keeps its own style on each side.
+                                Element(
+                                    key = QuickSettings.Elements.QuickSettingsMedia,
+                                    modifier = Modifier,
+                                ) {
                                     Media(
                                         viewModelFactory = viewModel.mediaViewModelFactory,
                                         presentationStyle =
-                                            if (
-                                                mediaInRow ||
-                                                    viewModel.qsContainerViewModel.compactMediaInQs
-                                            ) {
+                                            if (mediaInRow || compactMediaInQs) {
                                                 MediaPresentationStyle.Compressed
                                             } else {
                                                 MediaPresentationStyle.Default
