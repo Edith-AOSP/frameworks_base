@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -743,10 +744,13 @@ private object TileDefaults {
             return unavailableTileColors()
         }
         val context = LocalContext.current
-        // Read the configuration (assetsSeq matches PlatformTheme) so the color resolution below is
-        // re-run when the theme changes, e.g. after picking new colors in ThemePicker. Without this,
-        // a set override would keep resolving to the previous seed's color.
+        // Read the configuration (assetsSeq matches PlatformTheme) and the dark/light state so the
+        // color resolution below is re-run when the theme changes: a dark<->light toggle changes the
+        // values/values-night resources without necessarily changing assetsSeq, and picking new
+        // colors in ThemePicker changes assetsSeq. Without both keys the tile keeps the previous
+        // mode's color until something else forces a recomposition.
         val assetsSeq = LocalConfiguration.current.assetsSeq
+        val isDark = isSystemInDarkTheme()
         val active = visualState == STATE_ACTIVE
         val inactiveAlpha = edithTileColorOverride?.inactiveAlpha ?: EdithInactiveTileAlpha
 
@@ -756,14 +760,14 @@ private object TileDefaults {
             if (active) R.color.edith_qs_tile_active_icon else R.color.edith_qs_tile_inactive_icon
 
         // The override holds a swatch tag; resolve it against the current theme so the tile still
-        // follows palette changes (wallpaper / ThemePicker). Keyed on assetsSeq so the resolved
-        // colors are recomputed when the theme changes.
+        // follows palette changes (wallpaper / ThemePicker / dark mode). Keyed on assetsSeq and the
+        // dark/light state so the resolved colors are recomputed when the theme changes.
         val bgTag =
             if (active) edithTileColorOverride?.activeBg else edithTileColorOverride?.inactiveBg
         val iconTag =
             if (active) edithTileColorOverride?.activeFg else edithTileColorOverride?.inactiveFg
         val resolved =
-            remember(context, assetsSeq, bgTag, iconTag, defaultBgRes, defaultIconRes) {
+            remember(context, isDark, assetsSeq, bgTag, iconTag, defaultBgRes, defaultIconRes) {
                 val bgArgb =
                     EdithTileSwatches.resolve(context, bgTag) ?: context.getColor(defaultBgRes)
                 val fgArgb =
@@ -800,15 +804,17 @@ private object TileDefaults {
             return stock
         }
         val context = LocalContext.current
-        // Keyed on assetsSeq so the resolved colors are recomputed when the theme changes.
+        // Keyed on assetsSeq and the dark/light state so the resolved colors are recomputed when the
+        // theme changes (a dark<->light toggle may not change assetsSeq).
         val assetsSeq = LocalConfiguration.current.assetsSeq
+        val isDark = isSystemInDarkTheme()
         val active = uiState.visualState == STATE_ACTIVE
         val inactiveAlpha = override.inactiveAlpha ?: EdithInactiveTileAlpha
 
         val bgTag = if (active) override.activeBg else override.inactiveBg
         val iconTag = if (active) override.activeFg else override.inactiveFg
         val resolved =
-            remember(context, assetsSeq, bgTag, iconTag) {
+            remember(context, isDark, assetsSeq, bgTag, iconTag) {
                 QuickActionsTileSwatches.resolve(context, bgTag) to
                     QuickActionsTileSwatches.resolve(context, iconTag)
             }
