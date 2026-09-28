@@ -27,6 +27,7 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.util.fastMap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.ContentScope
+import com.android.systemui.animation.Expandable
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.grid.ui.compose.VerticalSpannedGrid
 import com.android.systemui.qs.edith.QuickActionsTileOverride
@@ -34,6 +35,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.Tile
 import com.android.systemui.qs.panels.ui.viewmodel.BounceableTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.QuickActionsGridViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.QuickActionsGridViewModel.Companion.COLUMNS
+import com.android.systemui.qs.pipeline.shared.TileSpec
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.toQuickActionElementKey
 import com.android.systemui.res.R
 
@@ -57,6 +59,12 @@ fun ContentScope.QuickActionsGrid(
     val tiles = sizedTiles.fastMap { it.tile }
     val squishiness by viewModel.squishinessViewModel.squishiness.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+
+    // Per-composition Expandable per spec. This grid renders in both QQS and the expanded QS panel
+    // at the same time; a shared Expandable would hold two transition sources and the dialog morph
+    // could pick the wrong (off-screen) one. Keeping one Expandable per rendering keeps the source
+    // unambiguous. Keyed by spec so it is stable across recompositions of this grid.
+    val expandables = remember { mutableMapOf<TileSpec, Expandable>() }
 
     Box(modifier = modifier) {
         val bounceables =
@@ -88,6 +96,7 @@ fun ContentScope.QuickActionsGrid(
                             isFirstInRow = isFirstInColumn,
                             isLastInRow = isLastInColumn,
                         ),
+                    expandableOverride = expandables.getOrPut(it.tile.spec) { Expandable() },
                     tileHapticsViewModelFactory = viewModel.tileHapticsViewModelFactory,
                     // There is no details view for the fixed Quick Actions grid.
                     detailsViewModel = null,

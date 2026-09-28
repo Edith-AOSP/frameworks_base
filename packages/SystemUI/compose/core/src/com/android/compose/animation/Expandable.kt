@@ -219,8 +219,19 @@ fun Expandable(
 
     // If dynamicTargetResolutionEnabled is false, manually register the source.
     // Otherwise, the source is registered via the 'registerSource' Modifier on the Expandable.
+    //
+    // Use a DisposableEffect (keyed on the controller) so the transition source is removed when
+    // this composable leaves composition or the controller is recreated. Adding it on every
+    // recomposition without removing left stale sources in the set, and
+    // Expandable.dialogTransitionController() picks the source by insertion order
+    // (firstOrNull()), so the wrong (stale/off-screen) source could be selected and the
+    // tile -> dialog morph would not run from the tile's current position.
     if (!dynamicTargetResolutionEnabled()) {
-        expandable.addSource(controller.transitionSource)
+        DisposableEffect(expandable, controller) {
+            val source = controller.transitionSource
+            expandable.addSource(source)
+            onDispose { expandable.removeSource(source) }
+        }
     }
 
     controller.transitionControllerFactory?.let { factory ->
