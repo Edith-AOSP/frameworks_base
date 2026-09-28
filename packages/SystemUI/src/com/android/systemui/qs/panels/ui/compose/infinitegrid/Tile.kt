@@ -168,6 +168,17 @@ fun ContentScope.Tile(
     edithTileColorOverride: EdithTileColorOverride? = null,
     edithQuickActionsTile: Boolean = false,
     edithQuickActionsOverride: QuickActionsTileOverride? = null,
+    /**
+     * Optional [Expandable] to use as the dialog/activity animation source instead of
+     * [TileViewModel.expandable].
+     *
+     * The Quick Actions grid renders the same tile in QQS and the expanded QS panel at the same
+     * time. Sharing the view model's single [Expandable] across both would register two
+     * transition sources on one coordinator, and the source is chosen by insertion order (so the
+     * wrong, off-screen source could be used). Passing a per-composition [Expandable] keeps each
+     * grid's source unambiguous.
+     */
+    expandableOverride: Expandable? = null,
 ) {
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
@@ -268,8 +279,11 @@ fun ContentScope.Tile(
         }
 
         val expandable =
-            if (dynamicTargetResolutionEnabled()) tile.expandable
-            else remember { Expandable(mutableSetOf()) }
+            when {
+                expandableOverride != null -> expandableOverride
+                dynamicTargetResolutionEnabled() -> tile.expandable
+                else -> remember { Expandable(mutableSetOf()) }
+            }
         Tooltip(
             text = uiState.label,
             modifier = modifier,
