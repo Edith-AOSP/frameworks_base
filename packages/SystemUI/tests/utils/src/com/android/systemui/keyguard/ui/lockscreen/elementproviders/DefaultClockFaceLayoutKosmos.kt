@@ -54,6 +54,7 @@ val Kosmos.defaultClockFaceLayout by
                                     timeKeeper = FixedTimeKeeper(),
                                     isAnimationEnabled = false,
                                 ),
+                            hostContext = testableContext,
                         ),
                     isLargeClock = true,
                 )

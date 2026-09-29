@@ -184,9 +184,21 @@ class FlexClockViewGroupController(private val clockCtx: FlexClockContext) :
             }
 
             override fun onThemeChanged(theme: ThemeConfig) {
+                // When no per-clock seed is set, read the accent from the host context so it follows
+                // the current system palette; a context that holds a stale resource snapshot would
+                // otherwise keep the previous theme's color.
+                val lockscreenColor =
+                    theme.seedColor
+                        ?: clockCtx.hostContext.getColor(
+                            if (theme.isDarkTheme) android.R.color.system_accent1_100
+                            else android.R.color.system_accent2_600
+                        )
+                val aodColor =
+                    theme.seedColor?.let { theme.getAodColor(clockCtx.context) }
+                        ?: clockCtx.hostContext.getColor(android.R.color.system_accent1_100)
                 view.updateColor(
-                    lockscreenColor = theme.getDefaultColor(clockCtx.context),
-                    aodColor = theme.getAodColor(clockCtx.context),
+                    lockscreenColor = lockscreenColor,
+                    aodColor = aodColor,
                 )
             }
 

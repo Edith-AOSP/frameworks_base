@@ -87,6 +87,10 @@ constructor(
                     timeKeeperFactory(),
                     isAnimationEnabled = true,
                 ),
+                // The default clock is not a plugin, so [ctx] is the live SystemUI context whose
+                // resources update in place on theme changes; use it as the host context for accent
+                // color reads (parity with the plugin clocks).
+                hostContext = ctx,
             ),
             buffers,
         )

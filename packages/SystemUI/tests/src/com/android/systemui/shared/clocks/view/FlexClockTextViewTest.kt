@@ -62,6 +62,7 @@ class FlexClockTextViewTest : SysuiTestCase() {
                         timeKeeper = FixedTimeKeeper(),
                         isAnimationEnabled = false,
                     ),
+                    hostContext = context,
                 ),
                 isLargeClock = false,
             )
