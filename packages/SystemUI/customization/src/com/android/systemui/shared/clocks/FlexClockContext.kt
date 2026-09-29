@@ -13,6 +13,7 @@
  */
 package com.android.systemui.shared.clocks
 
+import android.content.Context
 import com.android.systemui.customization.clocks.ClockContext
 import com.android.systemui.customization.clocks.ClockContextImpl
 import com.android.systemui.customization.clocks.TypefaceCache
@@ -21,8 +22,18 @@ import com.android.systemui.log.core.MessageBuffer
 class FlexClockContext(
     val typefaceCache: TypefaceCache<Unit>,
     private val innerCtx: ClockContextImpl,
+    /**
+     * The host application context. Its resources are updated in place when the system theme (e.g.
+     * the wallpaper-derived palette) changes, unlike a resource snapshot, so the clock re-reads its
+     * accent from here on theme changes.
+     */
+    val hostContext: Context,
 ) : ClockContext by innerCtx {
     fun copy(messageBuffer: MessageBuffer): FlexClockContext {
-        return FlexClockContext(typefaceCache, innerCtx.copy(messageBuffer = messageBuffer))
+        return FlexClockContext(
+            typefaceCache,
+            innerCtx.copy(messageBuffer = messageBuffer),
+            hostContext,
+        )
     }
 }
