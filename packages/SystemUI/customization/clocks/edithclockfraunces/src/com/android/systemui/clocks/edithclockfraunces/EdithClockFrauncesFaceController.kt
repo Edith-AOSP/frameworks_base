@@ -14,8 +14,10 @@
 package com.android.systemui.clocks.edithclockfraunces
 
 import android.icu.util.TimeZone
+import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.widget.FrameLayout
 import android.widget.RelativeLayout
 import com.android.app.animation.Interpolators
 import com.android.systemui.customization.clocks.AnimationState
@@ -93,6 +95,14 @@ class EdithClockFrauncesFaceController(
                     verticalAlignment = VerticalAlignment.CENTER
                     applyStyles(SMALL_STYLE, SMALL_AOD_STYLE)
                     text = smallHandler.getText()
+                    // Match the default clock: fill the fixed small-clock slot and center the text
+                    // in it. Without this the view keeps WRAP_CONTENT and is laid out at the top of
+                    // the slot, so the glyphs sit higher than Smartspace (which is anchored to the
+                    // slot's bottom).
+                    layoutParams =
+                        FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply {
+                            gravity = Gravity.CENTER
+                        }
                 }
             textView.onViewBoundsChanged = { boundsListener?.invoke(it) }
             textView.onViewMaxSizeChanged = { maxSizeListener?.invoke(it) }
