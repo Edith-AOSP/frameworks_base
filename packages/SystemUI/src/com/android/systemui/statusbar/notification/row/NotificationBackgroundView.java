@@ -355,7 +355,12 @@ public class NotificationBackgroundView extends View implements Dumpable,
                                 mBackgroundBlurDrawable.setXfermode(null);
                                 mBackgroundBlurDrawable.setCallback(
                                         NotificationBackgroundView.this);
-                                mBackgroundBlurDrawable.setColor(mNormalColor);
+                                // The blur layer is what actually gets drawn (see onDraw), so it must
+                                // carry the row's current tint — not the normal surface color, which
+                                // would make a colorized notification look uncolored (white on white
+                                // in light theme) and leave rows on a stale color after a theme
+                                // change. setTint() keeps mTintColor as the last applied tint.
+                                mBackgroundBlurDrawable.setColor(mTintColor);
                                 if (mBlurRegionSuppressed) {
                                     mBackgroundBlurDrawable.setAlpha(0);
                                 }
