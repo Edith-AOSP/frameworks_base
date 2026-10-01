@@ -1597,7 +1597,13 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public void onDensityOrFontScaleChanged() {
         super.onDensityOrFontScaleChanged();
         initDimens();
-        initBackground();
+        // ViewConfigCoordinator routes theme changes (Configuration#CONFIG_ASSETS_PATHS, e.g. an
+        // overlay re-apply) through this method rather than onUiModeChanged(). Re-resolve the
+        // background colors here as well, otherwise rows keep the previous theme's surface color
+        // until some unrelated event forces a rebind (a notification stays visually dark in light
+        // theme, or light in dark theme). updateBackgroundColorsOfSelf() reloads the color tokens
+        // and re-applies the computed tint, so it must run before the views are re-inflated.
+        updateBackgroundColorsOfSelf();
         reInflateViews();
         if (mChildrenContainer != null) {
             mChildrenContainer.dispatchConfigurationChanged(getResources().getConfiguration());
@@ -1661,13 +1667,12 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     public void onUiModeChanged() {
-        if (isBundle()) {
-            // If this is a bundle, then `onNotificationUpdated` will not be called as there is no
-            // backing notification entry for bundles. So update the background immediately.
-            updateBackgroundColorsOfSelf();
-        } else {
-            mUpdateSelfBackgroundOnUpdate = true;
-        }
+        // Re-resolve the background colors immediately. Deferring this to the next
+        // onNotificationUpdated() (via mUpdateSelfBackgroundOnUpdate) is unreliable because a bare
+        // theme change does not always produce a notification update, so most rows kept the previous
+        // theme's colors until something else forced a rebind. Updating here makes a theme toggle
+        // apply at once; reInflateViews() still runs afterwards and re-applies them after rebinding.
+        updateBackgroundColorsOfSelf();
         reInflateViews();
         if (mChildrenContainer != null) {
             for (ExpandableNotificationRow child : mChildrenContainer.getAttachedChildren()) {
@@ -1685,11 +1690,24 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     @Override
     protected void setBackgroundTintColor(int color) {
-        if (notificationRowTransparency()) {
-            boolean isColorized = false;
-            if (mEntryAdapter != null) {
-                isColorized = mEntryAdapter.isColorized();
+        // Colorized notifications (e.g. the screen recorder, other colorized foreground services)
+        // are drawn with the notification's own color as the background and light content on top,
+        // chosen by the platform when it builds the RemoteViews. If that color is not applied and we
+        // fall back to the normal/opaque surface color, the light content sits on a light background
+        // (white on white in light theme). Only the notification that is actually colorized may use
+        // its own color, and it is read live from that notification so expanding/collapsing this row
+        // (which replays interpolated background colors through setContentBackground) can never leak
+        // a color onto another row.
+        final boolean isColorized = mEntryAdapter != null && mEntryAdapter.isColorized();
+        if (isColorized && mEntryAdapter.getSbn() != null
+                && (mBgTint == NO_COLOR || mBgTint == mNormalColor || mBgTint == mOpaqueColor)) {
+            int notificationColor = mEntryAdapter.getSbn().getNotification().color;
+            if (notificationColor != Notification.COLOR_DEFAULT) {
+                color = notificationColor;
+                mBgTint = notificationColor;
             }
+        }
+        if (notificationRowTransparency()) {
             boolean isTransparent = usesTransparentBackground();
             if (isColorized) {
                 // For colorized notifications, use a color that matches the tint color at 90% alpha
