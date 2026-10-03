@@ -49,6 +49,10 @@ fun TransitionBuilder.toQuickSettingsSceneTransition(durationScale: Double = 1.0
     fade(Notifications.Elements.HeadsUpNotificationPlaceholder)
     fade(Shade.Elements.BackgroundScrim)
 
+    // The media card is a shared element between Shade and QuickSettings; fade it with the rest of
+    // the QS content so it doesn't linger for a frame when the shade is fully closed (QS -> Gone).
+    fade(Elements.QuickSettingsMedia)
+
     // New all compose element
     // Ideally, we would want to have the BrightnessSlider start right off screen and translate
     // down,

@@ -90,7 +90,10 @@ constructor(
 
     val tileGridViewModel = tileGridViewModelFactory.create()
 
-    val showMedia: Boolean by mediaCarouselInteractor.hasAnyMedia.hydratedStateOf()
+    // Same rule as QQS: the expanded panel also shows the media card only when there is ACTIVE
+    // media. Using one rule for both scenes keeps the shared QuickSettingsMedia element visible
+    // consistently (avoids the expanded card lingering/flashing on close when QQS has no player).
+    val showMedia: Boolean by mediaCarouselInteractor.hasActiveMedia.hydratedStateOf()
 
     val showMediaInRow: Boolean
         get() = qsMediaInRowViewModel.shouldMediaShowInRow
@@ -178,7 +181,9 @@ constructor(
         val mediaUiBehavior =
             MediaUiBehavior(
                 isCarouselDismissible = false,
-                carouselVisibility = MediaCarouselVisibility.WhenNotEmpty,
+                // Match QQS (WhenAnyCardIsActive) so the shared media element is shown
+                // consistently in both scenes.
+                carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
             )
     }
 

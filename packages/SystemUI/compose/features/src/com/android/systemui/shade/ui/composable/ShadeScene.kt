@@ -297,6 +297,16 @@ private fun ContentScope.SingleShade(
             key = QuickSettings.SharedValues.TilesSquishiness,
             canOverflow = false,
         )
+
+    // Media morph progress: 0f here (QQS two-row card), 1f in the expanded QuickSettings scene. The
+    // framework interpolates it across the Shade<->QS transition so the media card height/rows morph
+    // smoothly with the pull.
+    val mediaExpansion by
+        animateContentFloatAsState(
+            value = 0f,
+            key = QuickSettings.SharedValues.MediaExpansion,
+            canOverflow = false,
+        )
     LaunchedEffectWithLifecycle(Unit) {
         snapshotFlow { tileSquishiness }.collect { viewModel.setTileSquishiness(it) }
     }
@@ -437,9 +447,37 @@ private fun ContentScope.SingleShade(
                         },
                     media = {
                         if (isAlwaysComposedContentVisible()) {
-                            if (viewModel.isQsEnabled && viewModel.showMedia) {
+                            // Keep the media shared element composed for the whole Shade<->QS (and
+                            // ->Gone) transition, even after the session is cleared, so
+                            // sharedElement/fade(QuickSettingsMedia) always find it and the card
+                            // closes WITH the shade instead of being unmounted a frame early (which
+                            // made it "close late"). Only do this when the media was actually
+                            // showing, otherwise an empty element would be composed on a bare QQS
+                            // open and reserve a `spacedBy` gap that collapses after the transition.
+                            var mediaWasShowing by remember { mutableStateOf(false) }
+                            if (!layoutState.isTransitioning()) {
+                                mediaWasShowing = viewModel.showMedia
+                            }
+                            val keepMediaForTransition =
+                                mediaWasShowing &&
+                                    (layoutState.isTransitioningFromOrTo(Scenes.Shade) ||
+                                        layoutState.isTransitioningFromOrTo(Scenes.QuickSettings))
+                            if (
+                                viewModel.isQsEnabled &&
+                                    (viewModel.showMedia || keepMediaForTransition)
+                            ) {
                                 val compactMediaInQs =
                                     viewModel.qsContainerViewModel.compactMediaInQs
+                                // The card only morphs between the two-row QQS and three-row
+                                // expanded styles in the Edith "Dynamic" compact mode (Compressed
+                                // in QQS, Default in the expanded panel). In "Always" both sides are
+                                // Compressed, and the stock in-row media keeps its own handling.
+                                val compactMediaInQsInExpanded =
+                                    viewModel.qsContainerViewModel.compactMediaInQsInExpanded
+                                val mediaMorphs =
+                                    compactMediaInQs &&
+                                        !compactMediaInQsInExpanded &&
+                                        !mediaInRow
                                 // Shared with the expanded QS media (QuickSettingsMedia) so the card
                                 // slides from its QQS position to its expanded position with the
                                 // pull. The compact mode keeps its own style on each side.
@@ -457,9 +495,21 @@ private fun ContentScope.SingleShade(
                                             },
                                         behavior = ShadeSceneContentViewModel.qqsMediaUiBehavior,
                                         onDismissed = viewModel::onMediaSwipeToDismiss,
+                                        // The scene's rule is authoritative: QQS shows media only
+                                        // when there is active media.
+                                        visible = { viewModel.showMedia },
                                         location = Media.Location.SHADE,
                                         // Static compact card (not coupled to panel expansion).
                                         animateWithExpansion = false,
+                                        // Morph the card height/rows with the Shade<->QS pull.
+                                        morphProgress = if (mediaMorphs) {
+                                            { mediaExpansion }
+                                        } else {
+                                            null
+                                        },
+                                        // Keep the card alive if the session is cleared mid
+                                        // transition, so it closes with the shade.
+                                        holdDuringTransition = keepMediaForTransition,
                                     )
                                 }
                             }

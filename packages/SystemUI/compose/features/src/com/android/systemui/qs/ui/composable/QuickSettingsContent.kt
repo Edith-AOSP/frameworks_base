@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.PlatformSliderDefaults
 import com.android.compose.animation.scene.ContentScope
+import com.android.compose.animation.scene.animateContentFloatAsState
 import com.android.compose.gesture.gesturesDisabled
 import com.android.compose.modifiers.thenIf
 import com.android.compose.theme.PlatformTheme
@@ -48,6 +49,7 @@ import com.android.systemui.media.remedia.ui.compose.MediaPresentationStyle
 import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.panels.ui.compose.QuickActionsGrid
 import com.android.systemui.qs.panels.ui.compose.TileGrid
+import com.android.systemui.qs.shared.ui.QuickSettings
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.ui.viewmodel.QuickSettingsContainerViewModel
 import com.android.systemui.res.R
@@ -61,6 +63,15 @@ fun ContentScope.QuickSettingsContent(
     modifier: Modifier = Modifier,
     mediaSquishiness: () -> Float = { 1f },
 ) {
+    // Media morph progress: 1f here (expanded three-row card), 0f in the Shade (QQS) scene. The
+    // framework interpolates it across the Shade<->QS transition so the media card height/rows morph
+    // smoothly with the pull.
+    val mediaExpansion by
+        animateContentFloatAsState(
+            value = 1f,
+            key = QuickSettings.SharedValues.MediaExpansion,
+            canOverflow = false,
+        )
     QuickSettingsPanelLayout(
         quickActions =
             @Composable {
@@ -156,7 +167,18 @@ fun ContentScope.QuickSettingsContent(
             },
         media =
             @Composable {
-                if (isAlwaysComposedContentVisible()) {
+                // Only compose (and show) the media element when this scene will display it (same
+                // rule as QQS). Composing it unconditionally left a stale card during the close
+                // when QQS had no player.
+                if (isAlwaysComposedContentVisible() && viewModel.showMedia) {
+                    // The card only morphs between the two-row QQS and three-row expanded styles in
+                    // the Edith "Dynamic" compact mode (Compressed in QQS, Default here). In
+                    // "Always" both sides are Compressed, and the stock in-row media keeps its own
+                    // handling.
+                    val mediaMorphs =
+                        viewModel.compactMediaInQs &&
+                            !viewModel.compactMediaInQsInExpanded &&
+                            !mediaInRow
                     // Shared element key with the QQS media, so the card slides from its QQS
                     // position to its expanded position with the pull.
                     Element(key = Elements.QuickSettingsMedia, modifier = Modifier) {
@@ -171,9 +193,16 @@ fun ContentScope.QuickSettingsContent(
                             behavior = QuickSettingsContainerViewModel.mediaUiBehavior,
                             onDismissed = viewModel::onMediaSwipeToDismiss,
                             mediaSquishiness = mediaSquishiness,
+                            visible = { viewModel.showMedia },
                             location = Media.Location.QS,
                             // Static compact card unless this is the stock in-row media.
                             animateWithExpansion = mediaInRow,
+                            // Morph the card height/rows with the Shade<->QS pull.
+                            morphProgress = if (mediaMorphs) {
+                                { mediaExpansion }
+                            } else {
+                                null
+                            },
                         )
                     }
                 } else {

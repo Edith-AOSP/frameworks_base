@@ -50,6 +50,11 @@ fun TransitionBuilder.toSingleShadeTransition(
     fractionRange(start = .58f) {
         fade(QuickSettings.Elements.SplitShadeQuickSettings)
         fade(QuickSettings.Elements.FooterActions)
+        // The media card is a shared element between Shade and QuickSettings; fade it with the rest
+        // of the QS content so it doesn't linger for a frame when the shade is fully closed
+        // (Shade -> Gone). On large-screen portrait it is covered by QuickQuickSettingsAndMedia
+        // below, but phones need the explicit media element fade.
+        fade(QuickSettings.Elements.QuickSettingsMedia)
         if (isLargeScreenPortrait) {
             fade(QuickSettings.Elements.QuickQuickSettingsAndMedia)
             fade(Notifications.Elements.NotificationScrim)
