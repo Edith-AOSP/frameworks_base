@@ -23,6 +23,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.compose.ui.graphics.painter.rememberDrawablePainter
 
@@ -106,6 +108,7 @@ fun PlatformIconButton(
     shape: Shape = IconButtonDefaults.standardShape,
     @DrawableRes iconResource: Int,
     contentDescription: String?,
+    iconSize: Dp? = null,
 ) {
     IconButton(
         modifier = modifier,
@@ -118,6 +121,7 @@ fun PlatformIconButton(
             painter = painterResource(id = iconResource),
             contentDescription = contentDescription,
             tint = colors.contentColor,
+            modifier = if (iconSize != null) Modifier.size(iconSize) else Modifier,
         )
     }
 }
@@ -131,6 +135,7 @@ fun PlatformIconButton(
     shape: Shape = IconButtonDefaults.standardShape,
     iconDrawable: Drawable,
     contentDescription: String?,
+    iconSize: Dp? = null,
 ) {
     IconButton(
         modifier = modifier,
@@ -143,6 +148,7 @@ fun PlatformIconButton(
             painter = rememberDrawablePainter(iconDrawable),
             contentDescription = contentDescription,
             tint = colors.contentColor,
+            modifier = if (iconSize != null) Modifier.size(iconSize) else Modifier,
         )
     }
 }
