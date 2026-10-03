@@ -64,6 +64,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -231,7 +232,7 @@ fun Media(
     // Keep the last cards (and thus the shared element) alive while a scene transition is running,
     // so clearing the session does not unmount the card a frame early ("closing late").
     LaunchedEffect(holdDuringTransition) {
-        viewModel.setHoldCardsDuringTransition(holdDuringTransition)
+        viewModel.setHeldDuringTransition(holdDuringTransition)
     }
 
     viewModel.mediaUiEventLogger.logCarouselLocation(location)
@@ -311,7 +312,11 @@ private fun CardCarouselContent(
     LaunchedEffect(viewModel.currentIndex) {
         if (viewModel.currentIndex != pagerState.currentPage) {
             userTappedIndex = viewModel.currentIndex
-            pagerState.animateScrollToPage(viewModel.currentIndex)
+            // Snap (don't animate): this fires when a scene composes/reveals a pager whose
+            // position is out of sync with the shared selection (e.g. the QQS copy catching up to
+            // the expanded page on a close). Animating it would visibly swipe the shared card.
+            // User swipes drive pagerState directly, so they stay animated by the pager itself.
+            pagerState.scrollToPage(viewModel.currentIndex)
         }
     }
     LaunchedEffect(pagerState.currentPage, viewModel.cards.size) {
@@ -338,12 +343,6 @@ private fun CardCarouselContent(
 
     val roundedCornerShape = remember { RoundedCornerShape(32.dp) }
 
-    // The pager dots take the current card's artwork-derived color, like the card itself.
-    val pagerColorScheme =
-        rememberAnimatedColorScheme(viewModel.cards.getOrNull(pagerState.currentPage)?.colorScheme)
-    // Reserve space below the control bar for the dots so they never overlap the play/pause button.
-    val reserveDotsSpace = pagerState.pageCount > 1
-
     // Non-null when the scene path drives a height morph; used to size the card from the progress.
     val morph = morphProgress
 
@@ -365,7 +364,10 @@ private fun CardCarouselContent(
     ) {
         @Composable
         fun PagerContent() {
-            Box(modifier = Modifier.sysuiResTag(MediaRes.MEDIA_CAROUSEL_SCROLLER)) {
+            // The pager dots sit BELOW the card (in a strip inside this container) rather than
+            // overlaying it, so the card never has to reserve space inside itself: that reserve used
+            // to squeeze the controls and leave a gap below them.
+            Column(modifier = Modifier.sysuiResTag(MediaRes.MEDIA_CAROUSEL_SCROLLER)) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.sysuiResTag(MediaRes.MEDIA_CAROUSEL),
@@ -391,7 +393,6 @@ private fun CardCarouselContent(
                             mediaSquishiness = mediaSquishiness,
                             expansion = expansion,
                             animateWithExpansion = animateWithExpansion,
-                            reserveDotsSpace = reserveDotsSpace,
                             morphProgress = morphProgress,
                             modifier =
                                 Modifier.clip(roundedCornerShape)
@@ -404,8 +405,8 @@ private fun CardCarouselContent(
                                     .thenIf(morph != null) {
                                         Modifier.height {
                                             lerp(
-                                                    Media.COMPRESSED_HEIGHT,
-                                                    Media.DEFAULT_HEIGHT,
+                                                    Media.EDITH_COMPRESSED_HEIGHT,
+                                                    Media.EDITH_DEFAULT_HEIGHT,
                                                     morph!!().coerceIn(0f, 1f),
                                                 )
                                                 .roundToPx()
@@ -419,11 +420,17 @@ private fun CardCarouselContent(
                 if (pagerState.pageCount > 1) {
                     PagerDots(
                         pagerState = pagerState,
-                        activeColor = pagerColorScheme.primary,
-                        nonActiveColor = pagerColorScheme.primary.copy(alpha = 0.38f),
+                        // Use the theme primary (not the artwork-derived color).
+                        activeColor = MaterialTheme.colorScheme.primary,
+                        nonActiveColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
                         dotSize = 6.dp,
                         spaceSize = 6.dp,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                        modifier =
+                            Modifier.align(Alignment.CenterHorizontally)
+                                // Balance the dots between the card and the notification shade: the
+                                // QQS header already adds 16dp below the media (qqsLayoutPaddingBottom),
+                                // so use 16dp above the dots and 0 below → ~16dp on each side.
+                                .padding(top = 16.dp, bottom = 0.dp),
                     )
                 }
             }
@@ -475,7 +482,6 @@ private fun Card(
     mediaSquishiness: () -> Float,
     expansion: () -> Float,
     animateWithExpansion: Boolean,
-    reserveDotsSpace: Boolean = false,
     morphProgress: (() -> Float)? = null,
 ) {
     val viewModel = mediaViewModel.cards[cardIndex]
@@ -540,7 +546,6 @@ private fun Card(
                             colorScheme = colorScheme,
                             threeRows = true,
                             fillHeight = false,
-                            reserveDotsSpace = reserveDotsSpace,
                         )
                     }
 
@@ -552,7 +557,6 @@ private fun Card(
                             colorScheme = colorScheme,
                             threeRows = true,
                             fillHeight = true,
-                            reserveDotsSpace = reserveDotsSpace,
                         )
                     }
 
@@ -564,7 +568,6 @@ private fun Card(
                             colorScheme = colorScheme,
                             threeRows = false,
                             fillHeight = false,
-                            reserveDotsSpace = reserveDotsSpace,
                         )
                     }
 
@@ -665,7 +668,6 @@ private fun ContentScope.CardForeground(
     threeRows: Boolean,
     fillHeight: Boolean,
     modifier: Modifier = Modifier,
-    reserveDotsSpace: Boolean = false,
 ) {
     val viewModel = mediaViewModel.cards[cardIndex]
     // Can't use a Crossfade composable because of the custom layout logic below. Animate the alpha
@@ -686,7 +688,6 @@ private fun ContentScope.CardForeground(
                 threeRows = threeRows,
                 fillHeight = fillHeight,
                 colorScheme = colorScheme,
-                reserveDotsSpace = reserveDotsSpace,
                 modifier =
                     Modifier.layoutId(Media.LayoutId.CardForeground).graphicsLayer {
                         compositingStrategy = CompositingStrategy.ModulateAlpha
@@ -736,7 +737,6 @@ private fun ContentScope.CardForegroundContent(
     fillHeight: Boolean,
     colorScheme: AnimatedColorScheme,
     modifier: Modifier = Modifier,
-    reserveDotsSpace: Boolean = false,
 ) {
     val viewModel = mediaViewModel.cards[cardIndex]
     Column(
@@ -752,90 +752,64 @@ private fun ContentScope.CardForegroundContent(
                 )
                 .semantics { contentDescription = viewModel.contentDescription }
     ) {
-        // The Edith three-row layout renders its own context header, so the stock top row
-        // (app icon + output chips) is only used for the other presentation styles.
+        // The Edith three-row layout renders its own context header, so the stock top row is only
+        // used for the other presentation styles. The two-row header is a single row:
+        // (app icon) [device name >], same shape as the three-row context header (minus the app
+        // name / "on"), so the device name + chevron already sit in the same place in both scenes
+        // and no chevron morph is needed.
         if (!threeRows) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            // Icon.
-            Element(key = Media.Elements.AppIcon, modifier = modifier) {
-                Icon(
-                    icon = viewModel.icon,
-                    tint = colorScheme.primary,
-                    modifier =
-                        Modifier.align(Alignment.TopStart)
-                            .padding(top = 16.dp, start = 16.dp)
-                            .size(24.dp)
-                            .clip(CircleShape),
-                )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier =
+                Modifier.fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp)
+                    // Record the card's max width so the (fractional-width) suggestion chip can be
+                    // capped to a fraction of it.
+                    .layout { measurable, constraints ->
+                        mediaViewModel.cardMaxWidth =
+                            mediaViewModel.cardMaxWidth.coerceAtLeast(constraints.maxWidth)
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.measuredWidth, placeable.measuredHeight) {
+                            placeable.place(0, 0)
+                        }
+                    },
+        ) {
+            Icon(
+                icon = viewModel.icon,
+                tint = colorScheme.primary,
+                modifier = Modifier.size(24.dp).clip(CircleShape),
+            )
+            Spacer(Modifier.width(6.dp))
+            // Shared element with the three-row header's output control so the device name +
+            // chevron slides between its two positions during the morph.
+            Element(key = Media.Elements.OutputControl, modifier = Modifier) {
+                EdithOutputControl(viewModel = viewModel.outputSwitcherChip)
             }
 
-            Element(
-                key = Media.Elements.OutputSwitcherButton,
-                modifier = Modifier.align(Alignment.TopEnd),
+            // Keep the suggested-device chip, right-aligned after the output control.
+            Spacer(Modifier.weight(1f))
+            val cardMaxWidth = mediaViewModel.cardMaxWidth
+            AnimatedVisibility(
+                visible = viewModel.deviceSuggestionChip != null,
+                enter = fadeIn(),
+                exit = fadeOut(),
             ) {
-                val cardMaxWidth = mediaViewModel.cardMaxWidth
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier =
-                        Modifier
-                            // Output switcher chip must be limited to at most 40% of the
-                            // maximum width of the card.
-                            //
-                            // This saves the maximum possible width of the card so it can be
-                            // referred to by child custom layout code below.
-                            //
-                            // The assumption is that the row can be as wide as the entire card.
-                            .layout { measurable, constraints ->
-                                mediaViewModel.cardMaxWidth =
-                                    cardMaxWidth.coerceAtLeast(constraints.maxWidth)
-                                val placeable = measurable.measure(constraints)
-
-                                layout(placeable.measuredWidth, placeable.measuredHeight) {
-                                    placeable.place(0, 0)
-                                }
-                            },
-                ) {
-                    AnimatedVisibility(
-                        visible = viewModel.deviceSuggestionChip != null,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
-                    ) {
-                        rememberLastNonNull(viewModel.deviceSuggestionChip)?.let {
-                            DeviceChip(
-                                viewModel = it,
-                                style =
-                                    DeviceChipStyle(
-                                        fillColor = Color.Transparent,
-                                        contentColor = colorScheme.primary,
-                                        borderColor = colorScheme.primary,
-                                    ),
-                                modifier =
-                                    Modifier.fractionalMaxWidth(
-                                            containerMaxWidth = cardMaxWidth,
-                                            fraction = 0.5f,
-                                        )
-                                        .sysuiResTag(MediaRes.SUGGESTED_DEVICE_CHIP),
-                            )
-                        }
-                    }
-
-                    // The two-row output affordance is the chevron (shared element with the
-                    // three-row context header's chevron, so it morphs from the header to this
-                    // top-end "cast" position). Replaces the cast/device chip.
-                    val chevronExpandable = remember { Expandable() }
-                    Element(
-                        key = Media.Elements.OutputChevron,
+                rememberLastNonNull(viewModel.deviceSuggestionChip)?.let {
+                    DeviceChip(
+                        viewModel = it,
+                        style =
+                            DeviceChipStyle(
+                                fillColor = Color.Transparent,
+                                contentColor = colorScheme.primary,
+                                borderColor = colorScheme.primary,
+                            ),
                         modifier =
-                            Modifier.padding(top = 16.dp, end = 16.dp)
-                                .clickable { viewModel.outputSwitcherChip.onClick(chevronExpandable) }
-                                .clearAndSetSemantics {
-                                    contentDescription =
-                                        viewModel.outputSwitcherChip.text?.toString()
-                                            ?: viewModel.outputSwitcherChip.defaultDescription
-                                },
-                    ) {
-                        MediaOutputChevron()
-                    }
+                            Modifier.fractionalMaxWidth(
+                                    containerMaxWidth = cardMaxWidth,
+                                    fraction = 0.5f,
+                                )
+                                .sysuiResTag(MediaRes.SUGGESTED_DEVICE_CHIP),
+                    )
                 }
             }
         }
@@ -857,21 +831,27 @@ private fun ContentScope.CardForegroundContent(
             val areActionsVisible =
                 viewModel.actionButtonLayout == MediaCardActionButtonLayout.WithPlayPause
 
-            // 1. Context header: (app icon) App on (output icon) Device.
-            // Keyed as an element so it cross-fades during the two-row <-> three-row morph; it
-            // exists only in this (three-row) scene, so without a fade it would overlap the
-            // two-row content while the card morphs.
-            Element(
-                key = Media.Elements.ContextHeader,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+            // 1. Context header: (app icon) App on (output device name >).
+            // The "(app icon) App on" part is keyed as an element that cross-fades (it exists only
+            // in this three-row scene), while the output control is a SEPARATE shared element
+            // (sibling, not nested) that morphs/slides between the two scenes.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
             ) {
-                EdithContextHeader(
-                    icon = viewModel.icon,
-                    iconTint = colorScheme.primary,
-                    appName = viewModel.appName,
-                    outputChip = viewModel.outputSwitcherChip,
-                    modifier = Modifier,
-                )
+                Element(key = Media.Elements.ContextHeader, modifier = Modifier) {
+                    EdithContextHeader(
+                        icon = viewModel.icon,
+                        iconTint = colorScheme.primary,
+                        appName = viewModel.appName,
+                        deviceName = deviceNameFor(viewModel.outputSwitcherChip),
+                        modifier = Modifier,
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                Element(key = Media.Elements.OutputControl, modifier = Modifier) {
+                    EdithOutputControl(viewModel = viewModel.outputSwitcherChip)
+                }
             }
 
             // 2. Metadata.
@@ -925,14 +905,7 @@ private fun ContentScope.CardForegroundContent(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier =
                         Modifier.fillMaxWidth()
-                            .padding(
-                                start = 8.dp,
-                                end = 8.dp,
-                                top = 0.dp,
-                                // Reserve extra space below the control bar for the pager dots so
-                                // they don't overlap the play/pause button.
-                                bottom = if (reserveDotsSpace) 20.dp else 8.dp,
-                            ),
+                            .padding(start = 8.dp, end = 8.dp, top = 0.dp, bottom = 8.dp),
                 ) {
                     // Far-left slot: additional action #0 (or reserved space).
                     SecondarySlot(viewModel = viewModel.additionalActions.getOrNull(0), elementIndex = 0)
@@ -983,7 +956,9 @@ private fun ContentScope.CardForegroundContent(
         } else {
             // Two row presentation style.
             //
-            // Bottom row.
+            // Bottom row: metadata (title + artist stacked) on the left, transport controls on the
+            // right. The controls are nudged up so their vertical center lines up with the track
+            // TITLE (not the title+artist block center).
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
@@ -998,7 +973,8 @@ private fun ContentScope.CardForegroundContent(
 
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     val areActionsVisible =
-                        viewModel.actionButtonLayout == MediaCardActionButtonLayout.WithPlayPause
+                        viewModel.actionButtonLayout ==
+                            MediaCardActionButtonLayout.WithPlayPause
 
                     if (
                         viewModel.actionButtonLayout
@@ -1017,12 +993,16 @@ private fun ContentScope.CardForegroundContent(
                             }
                     }
 
-                    // Center group matching the three-row control bar: prev, play/pause, next, with
-                    // the same visibility rules (so the two scenes morph in sync).
-                    val navigationViewModel = viewModel.navigation as? MediaNavigationViewModel.Showing
+                    // Center group matching the three-row control bar: prev, play/pause, next,
+                    // with the same visibility rules (so the two scenes morph in sync).
+                    val navigationViewModel =
+                        viewModel.navigation as? MediaNavigationViewModel.Showing
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        // Align the control's vertical center with the title line (~half the
+                        // artist line height above the title+artist block center).
+                        modifier = Modifier.offset(y = (-10).dp),
                     ) {
                         navigationViewModel?.left?.let {
                             SecondaryAction(
@@ -1790,9 +1770,9 @@ private fun CardGuts(
 }
 
 /**
- * A small header showing the streaming app and the connected audio device, e.g.
- * "(app icon) Spotify on Pixel Buds Pro 2". The device name is clickable and opens the output
- * switcher dialog.
+ * The app icon + "App on" part of the three-row context header. The output device control
+ * (`EdithOutputControl`) is rendered separately as a sibling [Media.Elements.OutputControl] element
+ * so it can morph (slide) between the two-row and three-row headers.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -1800,12 +1780,9 @@ private fun ContentScope.EdithContextHeader(
     icon: Icon,
     iconTint: Color,
     appName: String,
-    outputChip: MediaDeviceChipViewModel,
+    deviceName: String,
     modifier: Modifier = Modifier,
 ) {
-    val deviceName =
-        outputChip.text?.takeIf { it.isNotBlank() }?.toString()
-            ?: stringResource(com.android.settingslib.R.string.media_transfer_this_device_name)
     val headerDescription =
         stringResource(R.string.edith_media_context_header, appName, deviceName)
     Row(
@@ -1816,7 +1793,9 @@ private fun ContentScope.EdithContextHeader(
         Icon(
             icon = icon,
             tint = iconTint,
-            modifier = Modifier.size(20.dp),
+            // Match the compressed (two-row) header icon: same size + circular clip, so the app
+            // icon doesn't jump when the card cross-fades between the two scenes.
+            modifier = Modifier.size(24.dp).clip(CircleShape),
         )
         // Gap after the app icon.
         Spacer(Modifier.width(6.dp))
@@ -1839,28 +1818,34 @@ private fun ContentScope.EdithContextHeader(
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
         )
-        Spacer(Modifier.width(4.dp))
-        EdithOutputControl(
-            viewModel = outputChip,
-            deviceName = deviceName,
-        )
     }
 }
 
-/** The output device name (semibold, text only), clickable to open the output switcher dialog. */
+/** Resolves the display name for an output device chip (falls back to "This phone"). */
+@Composable
+private fun deviceNameFor(outputChip: MediaDeviceChipViewModel): String =
+    outputChip.text?.takeIf { it.isNotBlank() }?.toString()
+        ?: stringResource(com.android.settingslib.R.string.media_transfer_this_device_name)
+
+/** The output device name (semibold, text only) + chevron, clickable to open the output switcher. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ContentScope.EdithOutputControl(
     viewModel: MediaDeviceChipViewModel,
-    deviceName: String,
     modifier: Modifier = Modifier,
 ) {
+    val deviceName = deviceNameFor(viewModel)
     val clickInteractionSource = remember { MutableInteractionSource() }
     val expandable = remember { Expandable() }
     Expandable(
         expandable = expandable,
         controller =
-            rememberExpandableController(color = Color.Transparent, shape = RectangleShape),
+            rememberExpandableController(
+                color = Color.Transparent,
+                // The controller shape drives the output-switcher dialog's expand/collapse morph;
+                // a rounded shape (matching DeviceChip) avoids closing into a rectangle.
+                shape = RoundedCornerShape(12.dp),
+            ),
         useModifierBasedImplementation = true,
         defaultMinSize = false,
         modifier = Modifier.wrapContentSize(),
@@ -1886,10 +1871,9 @@ private fun ContentScope.EdithOutputControl(
                 overflow = TextOverflow.Clip,
             )
             // Trailing affordance: indicates the device name is clickable (opens the output
-            // switcher). Decorative — the row's content description is the device name. Keyed as
-            // its own element so it can morph to the two-row top-end (cast position).
+            // switcher). Decorative — the row's content description is the device name.
             Spacer(Modifier.width(2.dp))
-            Element(key = Media.Elements.OutputChevron, modifier = Modifier) { MediaOutputChevron() }
+            MediaOutputChevron()
         }
     }
 }
@@ -2431,7 +2415,6 @@ object Media {
     }
 
     private fun TransitionBuilder.fadeAll() {
-        fade(Elements.AppIcon)
         fade(Elements.PlayPauseButton)
         fade(Elements.Metadata)
         fade(Elements.PrevButton)
@@ -2450,36 +2433,70 @@ object Media {
      *
      * `fade` handles both directions (enter/leave), so this is shared by the two directions. Any
      * future content added to only one of these scenes must be element-keyed and listed here.
+     *
+     * The two-row header now mirrors the three-row one (app icon + device name + chevron, unkeyed)
+     * so it needs no fade; only the three-row-only rows are listed.
      */
     private fun TransitionBuilder.fadeSceneSpecificElements() {
-        // Three-row only.
         fade(Elements.ContextHeader)
         fade(Elements.ScrubberRow)
-        // Two-row only.
-        fade(Elements.AppIcon)
-        fade(Elements.OutputSwitcherButton)
     }
 
     /** Definitions of how scene changes are transition-animated. */
     val Transitions = transitions {
         from(Scenes.Default, to = Scenes.Compact) {}
         from(Scenes.Default, to = Scenes.Large) {}
-        from(Scenes.Default, to = Scenes.Compressed) { fadeSceneSpecificElements() }
+        from(Scenes.Default, to = Scenes.Compressed) {
+            fadeSceneSpecificElements()
+            // Reverse of the Compressed->Default sequence: controls fade out, the seek bar leaves,
+            // then the controls fade back in.
+            fadeControlsForMorph(reverse = true)
+        }
         from(Scenes.Compressed, to = Scenes.Default) {
             fadeSceneSpecificElements()
-            fractionRange(start = 0.35f) {
-                fade(Elements.SeekBarSlider)
-                fade(Elements.PrevButton)
-                for (i in 0..5) {
-                    fade(Elements.additionalActionButton(i))
-                }
-            }
+            // Controls (Prev/Play/Next) fade out first, then the seek bar appears, then the
+            // controls fade back in. The out/in handoff comes from the drawn copy switching as the
+            // transition's current content moves from Compressed to Default (the shared-element
+            // morph is disabled for these keys so they fade instead of sliding).
+            fadeControlsForMorph(reverse = false)
         }
         from(Scenes.Compact, to = Scenes.Compressed) { fade(Elements.SeekBarSlider) }
         from(Scenes.Thumbnail, to = Scenes.Default) { fadeAll() }
         from(Scenes.Thumbnail, to = Scenes.Compact) { fadeAll() }
         from(Scenes.Thumbnail, to = Scenes.Large) { fadeAll() }
         from(Scenes.Thumbnail, to = Scenes.Compressed) { fadeAll() }
+    }
+
+    /**
+     * Fades (instead of morphing) the transport controls during the two-row <-> three-row morph:
+     * the controls fade (out then back in, as the drawn copy switches from the from-content to the
+     * to-content) first, and the seek bar (three-row only) fades in slightly later, so the effect
+     * reads top-to-bottom. `sharedElement(enabled = false)` disables the shared-element morph for
+     * these keys so they are drawn per the current content and cross-faded.
+     *
+     * Only ONE alpha transformation is allowed per element/content, so the controls get a single
+     * `fade` (the out/in handoff comes from the drawn-copy switch, not from two fades).
+     *
+     * [reverse] mirrors the timing for the Default -> Compressed direction.
+     */
+    private fun TransitionBuilder.fadeControlsForMorph(reverse: Boolean) {
+        // Must be top level (sharedElement() cannot be inside a fractionRange).
+        sharedElement(Elements.PrevButton, enabled = false)
+        sharedElement(Elements.NextButton, enabled = false)
+        sharedElement(Elements.PlayPauseButton, enabled = false)
+
+        val controls = if (reverse) 0.5f to 1f else 0f to 0.5f
+        val seekBar = if (reverse) 0.4f to 0.7f else 0.3f to 0.6f
+
+        fractionRange(start = controls.first, end = controls.second) {
+            fade(Elements.PrevButton)
+            fade(Elements.NextButton)
+            fade(Elements.PlayPauseButton)
+        }
+        fractionRange(start = seekBar.first, end = seekBar.second) { fade(Elements.SeekBarSlider) }
+        for (i in 0..5) {
+            fade(Elements.additionalActionButton(i))
+        }
     }
 
     /**
@@ -2493,7 +2510,6 @@ object Media {
      * animations even further.
      */
     object Elements {
-        val AppIcon = ElementKey("app_icon")
         val PlayPauseButton = ElementKey("play_pause")
         val Metadata = ElementKey("metadata")
         val PrevButton = ElementKey("prev")
@@ -2501,14 +2517,13 @@ object Media {
         val SeekBarSlider = ElementKey("seek_bar_slider")
         val OutputSwitcherButton = ElementKey("output_switcher")
         val MediaCarousel = ElementKey("media_carousel")
-        /**
-         * The chevron affordance of the output control. A shared element so, during the two-row <->
-         * three-row morph, it travels from the three-row context header to the two-row top-end (the
-         * cast position).
-         */
-        val OutputChevron = ElementKey("output_chevron")
         /** Three-row-only context header "(app) on (device)"; faded during the two<->three morph. */
         val ContextHeader = ElementKey("context_header")
+        /**
+         * The output device control (device name + chevron), shared between the two-row and
+         * three-row headers so it morphs (slides) between its positions instead of cross-fading.
+         */
+        val OutputControl = ElementKey("output_control")
         /** Three-row-only scrubber row (timestamps + seek bar); faded during the morph. */
         val ScrubberRow = ElementKey("scrubber_row")
 
@@ -2545,6 +2560,22 @@ object Media {
     val DEFAULT_HEIGHT = 176.dp
     val COMPRESSED_HEIGHT = 128.dp
     val COMPACT_HEIGHT = 80.dp
+
+    /**
+     * Natural (content) height of the Edith two-row ("Compressed") card, used as the QQS end of the
+     * two-row <-> three-row height morph. The stock [COMPRESSED_HEIGHT] (128dp) is taller than the
+     * Edith two-row content, so forcing it in QQS made the card noticeably taller than the
+     * content-sized lock-screen card (which has no morph and is content-wrapped).
+     */
+    val EDITH_COMPRESSED_HEIGHT = 104.dp
+
+    /**
+     * Height of the Edith three-row (expanded) card, used as the expanded end of the two-row <->
+     * three-row height morph. Larger than the stock [DEFAULT_HEIGHT] (176dp) so the Edith three-row
+     * content (bigger context header + the scrollable rows + the 56dp control bar) fits without the
+     * card clipping the control buttons at the bottom.
+     */
+    val EDITH_DEFAULT_HEIGHT = 204.dp
 }
 
 private fun MediaPresentationStyle.toScene(): SceneKey {

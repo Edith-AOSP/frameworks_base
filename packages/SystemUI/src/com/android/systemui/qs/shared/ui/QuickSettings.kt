@@ -81,6 +81,14 @@ object QuickSettings {
     object SharedValues {
         val TilesSquishiness = ValueKey("QuickSettingsTileSquishiness")
 
+        /**
+         * Interpolated progress of the media card morph between the QQS two-row ("Compressed") card
+         * and the expanded-QS three-row ("Default") card. The Shade scene declares `0f`, the
+         * QuickSettings scene `1f`, so the value tracks the Shade<->QS transition progress and the
+         * media card's height/rows morph smoothly with the pull.
+         */
+        val MediaExpansion = ValueKey("QuickSettingsMediaExpansion")
+
         object SquishinessValues {
             val Default = 1f
             val LockscreenSceneStarting = 0.3f

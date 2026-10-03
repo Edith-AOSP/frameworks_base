@@ -93,6 +93,20 @@ constructor(
     private var latestCurrentIndex = 0
     private var isVisible: () -> Boolean = { true }
 
+    /**
+     * When true, keep showing the last cards even after the sessions are cleared, so the media
+     * shared element stays present for the duration of a Shade<->QS transition (otherwise clearing
+     * the session unmounts the card a frame early and it "closes late" instead of travelling with
+     * the shade). Set from the Shade scene based on the scene transition state.
+     */
+    private var holdCardsDuringTransition: Boolean by mutableStateOf(false)
+    private var lastNonEmptyCards = emptyList<MediaCardViewModel>()
+
+    /** Holds/ releases the last cards so the media element survives a scene transition. */
+    fun setHeldDuringTransition(hold: Boolean) {
+        holdCardsDuringTransition = hold
+    }
+
     private val isOnLockscreen: Boolean by
         interactor.isOnLockscreen.hydratedStateOf(initialValue = true)
 
@@ -397,16 +411,35 @@ constructor(
                     }
                 }
             }
-            .let {
+            .let { fresh ->
                 if (isVisible()) {
-                    if (latestVersion.size != it.size) {
-                        mediaLogger.logMediaCarouselSize(it.size)
+                    if (latestVersion.size != fresh.size) {
+                        mediaLogger.logMediaCarouselSize(fresh.size)
                     }
-                    latestVersion = it
+                    latestVersion = fresh
                 }
-                latestVersion
+                when {
+                    fresh.isNotEmpty() -> {
+                        lastNonEmptyCards = fresh
+                        latestVersion
+                    }
+                    // Hold the last cards so the media shared element stays composed during the
+                    // Shade<->QS transition even though the sessions were cleared.
+                    holdCardsDuringTransition -> lastNonEmptyCards
+                    else -> latestVersion
+                }
             }
     }
+
+    /**
+     * Whether the scene wants this carousel shown (set via [setVisibility] from the scene's media
+     * lambda). Defaults to `true`. The scene owns the per-scene rule (e.g. QQS shows only active
+     * media, the expanded panel shows any media), so both the element composition and this
+     * visibility use the *same* rule instead of each scene's separate [MediaViewModel] deriving it
+     * independently.
+     */
+    private val sceneVisible: Boolean
+        get() = isVisible()
 
     val settingsButtonViewModel =
         MediaSettingsButtonViewModel(
@@ -427,14 +460,22 @@ constructor(
     /** Whether the carousel should be visible. */
     val isCarouselVisible: Boolean
         get() =
-            when (carouselVisibility) {
-                MediaCarouselVisibility.WhenNotEmpty ->
-                    interactor.hasAnyMedia && (!isOnLockscreen || interactor.allowMediaOnLockscreen)
+            // While a scene transition is holding the card (cleared mid-transition), force it
+            // visible so it can travel out with the panel.
+            (holdCardsDuringTransition && lastNonEmptyCards.isNotEmpty()) ||
+                // Otherwise the SCENE's rule is authoritative (the scene sets `visible` from its
+                // own showMedia, and composes the shared element with the same rule), so the two
+                // scenes can't disagree about the shared element's visibility.
+                (sceneVisible &&
+                    when (carouselVisibility) {
+                        MediaCarouselVisibility.WhenNotEmpty ->
+                            interactor.hasAnyMedia &&
+                                (!isOnLockscreen || interactor.allowMediaOnLockscreen)
 
-                MediaCarouselVisibility.WhenAnyCardIsActive ->
-                    interactor.hasActiveMedia &&
-                        (!isOnLockscreen || interactor.allowMediaOnLockscreen)
-            }
+                        MediaCarouselVisibility.WhenAnyCardIsActive ->
+                            interactor.hasActiveMedia &&
+                                (!isOnLockscreen || interactor.allowMediaOnLockscreen)
+                    })
 
     fun setVisibility(visible: () -> Boolean) {
         isVisible = visible
