@@ -217,23 +217,12 @@ fun Expandable(
 
     val expandable = expandable ?: remember { Expandable(mutableSetOf()) }
 
-    // If dynamicTargetResolutionEnabled is false, manually register the source.
-    // Otherwise, the source is registered via the 'registerSource' Modifier on the Expandable.
-    //
-    // Use a DisposableEffect (keyed on the controller) so the transition source is removed when
-    // this composable leaves composition or the controller is recreated. Adding it on every
-    // recomposition without removing left stale sources in the set, and
-    // Expandable.dialogTransitionController() picks the source by insertion order
-    // (firstOrNull()), so the wrong (stale/off-screen) source could be selected and the
-    // tile -> dialog morph would not run from the tile's current position.
-    if (!dynamicTargetResolutionEnabled()) {
-        DisposableEffect(expandable, controller) {
-            val source = controller.transitionSource
-            expandable.addSource(source)
-            onDispose { expandable.removeSource(source) }
-        }
-    }
-
+    // The transition source is registered lifecycle-aware via the `registerSource` Modifier applied
+    // to the content below: it adds the source when the composable is placed and removes it when
+    // unplaced, in BOTH the dynamicTargetResolution on/off configurations. Previously the off
+    // configuration registered the source in a DisposableEffect (composition-scoped), so the source
+    // set could be empty while the component was still clickable — and
+    // Expandable.dialogTransitionController() throws when it finds no source with the flag off.
     controller.transitionControllerFactory?.let { factory ->
         DisposableEffect(factory) {
             // Notify the transition controller factory that the expandable is now available, so it
@@ -446,8 +435,9 @@ private fun Modifier.expandable(
  * Compose.
  *
  * This modifier is the way to link a Composable-based [TransitionSource] to its [Expandable]
- * instance. It intelligently handles registration based on the [dynamicTargetResolution] feature
- * flag
+ * instance. It registers the source while the composable is placed and unregisters it when it is
+ * unplaced, in BOTH the dynamicTargetResolution on/off configurations (the flag only selects which
+ * transition controller is resolved, not whether the source is tracked).
  *
  * @param transitionSource The [TransitionSource] instance associated with this Composable.
  * @param expandable The long-lived [Expandable] coordinator this source belongs to.
@@ -455,11 +445,7 @@ private fun Modifier.expandable(
  */
 @Composable
 fun Modifier.registerSource(transitionSource: TransitionSource, expandable: Expandable): Modifier {
-    return if (dynamicTargetResolutionEnabled()) {
-        this.then(RegisterTransitionSource(transitionSource, expandable))
-    } else {
-        this
-    }
+    return this.then(RegisterTransitionSource(transitionSource, expandable))
 }
 
 private data class RegisterTransitionSource(
@@ -471,8 +457,7 @@ private data class RegisterTransitionSource(
     }
 
     override fun update(node: TransitionSourceNode) {
-        node.transitionSource = transitionSource
-        node.expandable = expandable
+        node.update(transitionSource, expandable)
     }
 }
 
@@ -495,12 +480,43 @@ private class TransitionSourceNode(
     var expandable: Expandable,
 ) : Modifier.Node(), LayoutAwareModifierNode, UnplacedAwareModifierNode {
 
+    // Whether we currently have the source registered (i.e. the node is placed). Tracked so that
+    // [update] can re-register when the source/expandable changes while the node stays placed.
+    private var placed = false
+
     override fun onPlaced(coordinates: LayoutCoordinates) {
+        placed = true
         expandable.addSource(transitionSource)
     }
 
     override fun onUnplaced() {
+        placed = false
         expandable.removeSource(transitionSource)
+    }
+
+    override fun onReset() {
+        if (placed) {
+            placed = false
+            expandable.removeSource(transitionSource)
+        }
+    }
+
+    fun update(transitionSource: TransitionSource, expandable: Expandable) {
+        if (transitionSource === this.transitionSource && expandable === this.expandable) {
+            return
+        }
+        // Re-register when the source or its coordinator changes while placed (e.g. the tile's
+        // controller is recreated on recomposition): drop the old source and add the new one, so
+        // the coordinator never keeps a dead source and never ends up with an empty set while the
+        // component is still on screen/clickable.
+        if (placed) {
+            this.expandable.removeSource(this.transitionSource)
+        }
+        this.transitionSource = transitionSource
+        this.expandable = expandable
+        if (placed) {
+            expandable.addSource(transitionSource)
+        }
     }
 }
 
