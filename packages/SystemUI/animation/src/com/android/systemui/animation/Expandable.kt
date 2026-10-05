@@ -71,15 +71,19 @@ class Expandable(
     }
 
     private fun requiredTransitionSource(): TransitionSource? {
-        val source = transitionSources.firstOrNull()
-
-        // Assuming one 'transitionSource' is always available when dynamic resolution is off
-        if (!TransitionAnimator.dynamicTargetResolutionEnabled() && source == null) {
-            throw IllegalStateException(
-                "No TransitionSource found with dynamicTargetResolution flag disabled"
-            )
-        }
-        return source
+        // A TransitionSource is only registered while its source UI is attached and laid out (see
+        // addSource/removeSource and the layout-aware registration in the Compose implementation).
+        // A caller can therefore legitimately request a transition while no source is currently
+        // registered (e.g. the tile is temporarily unplaced during a transition, or the source is
+        // owned by a View-based tile whose registration the framework does not control). In that
+        // case there is no on-screen geometry to animate from, so there is no morph to run and we
+        // return null. This mirrors the rest of the framework, which treats a missing/unattached
+        // source as "skip the animation" rather than a fatal error (see
+        // DialogTransitionAnimator.Controller.fromView, which returns null when the view is not
+        // attached, and show(resolveController = ...), which falls back to dialog.show()). The
+        // dynamicTargetResolution flag only selects which transition controller is resolved, it
+        // does not change whether a missing source is tolerated.
+        return transitionSources.firstOrNull()
     }
 
     /**

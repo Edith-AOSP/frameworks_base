@@ -130,16 +130,14 @@ class ExpandableTest : SysuiTestCase() {
 
     @Test
     @DisableFlags(Flags.FLAG_ANIMATION_LIBRARY_DYNAMIC_TARGET_RESOLUTION)
-    fun requiredTransitionSource_throwsIfEmptyAndFlagDisabled() {
+    fun requiredTransitionSource_returnsNullIfEmptyAndFlagDisabled() {
         val emptyExpandable = Expandable()
 
-        // dialogTransitionController calls requiredTransitionSource internally
-        try {
-            emptyExpandable.dialogTransitionController()
-            assertThat(false).isTrue() // Should have thrown
-        } catch (e: IllegalStateException) {
-            assertThat(e.message).contains("No TransitionSource found")
-        }
+        // dialogTransitionController calls requiredTransitionSource internally. With no registered
+        // source there is no geometry to animate from, so the controller is null (no morph) rather
+        // than a thrown exception.
+        assertThat(emptyExpandable.dialogTransitionController()).isNull()
+        assertThat(emptyExpandable.activityTransitionController()).isNull()
     }
 
     @Test
