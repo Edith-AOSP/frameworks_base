@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.PlatformSliderDefaults
@@ -100,6 +101,14 @@ fun ContentScope.QuickSettingsContent(
                             .filterNotNull()
                             .collect { isBrightnessSliderInteractable = it >= .5f }
                     }
+                    // The Edith style spaces the QS sections itself (see QuickSettingsPanelLayout),
+                    // so drop the stock top margin to keep the gaps equal and tight.
+                    val brightnessTopMargin =
+                        if (viewModel.edithStyleEnabled) {
+                            0.dp
+                        } else {
+                            dimensionResource(id = R.dimen.qs_brightness_margin_top)
+                        }
                     Element(modifier = Modifier, key = Elements.BrightnessSlider) {
                         BrightnessSliderContainer(
                             viewModel.brightnessSliderViewModel,
@@ -109,13 +118,20 @@ fun ContentScope.QuickSettingsContent(
                                     ContainerColors.defaultContainerColor,
                                 ),
                             modifier =
-                                Modifier.padding(
-                                        vertical =
-                                            dimensionResource(id = R.dimen.qs_brightness_margin_top)
-                                    )
+                                Modifier.padding(vertical = brightnessTopMargin)
                                     .thenIf(!isBrightnessSliderInteractable) {
                                         Modifier.gesturesDisabled()
                                     },
+                            // Zero the slider's own vertical padding in the Edith style: the layout
+                            // spaces the QS sections itself, so the gaps stay equal and tight.
+                            dimensions =
+                                if (viewModel.edithStyleEnabled) {
+                                    QuickSettingsShade.Dimensions.brightnessSliderDimensions.copy(
+                                        verticalPadding = 0.dp
+                                    )
+                                } else {
+                                    QuickSettingsShade.Dimensions.brightnessSliderDimensions
+                                },
                         )
                     }
                 }
@@ -142,7 +158,13 @@ fun ContentScope.QuickSettingsContent(
                                 PlatformSliderDefaults.defaultPlatformSliderColors(),
                             hapticsViewModelFactory =
                                 volumeSliderViewModel.getSliderHapticsViewModelFactory(),
-                            dimensions = QuickSettingsShade.Dimensions.VolumeSliderDimensions,
+                            // Zero the slider's own vertical padding: the Edith layout spaces the
+                            // QS sections itself, so the gaps stay equal and tight.
+                            dimensions =
+                                QuickSettingsShade.Dimensions.VolumeSliderDimensions.copy(
+                                    verticalPadding = 0.dp
+                                ),
+                            iconAtStart = true,
                         )
                     }
                 }
@@ -212,6 +234,7 @@ fun ContentScope.QuickSettingsContent(
                 }
             },
         mediaInRow = mediaInRow,
+        edith = viewModel.edithStyleEnabled,
         modifier =
             modifier
                 .padding(horizontal = dimensionResource(id = R.dimen.qs_horizontal_margin))
@@ -227,11 +250,17 @@ private fun ContentScope.QuickSettingsPanelLayout(
     tiles: @Composable () -> Unit,
     media: @Composable () -> Unit,
     mediaInRow: Boolean,
+    edith: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    // The Edith style uses a single, tighter gap between its sections (Quick Actions, brightness,
+    // volume and the tile grid) so they read as one evenly-spaced stack. The stock layout keeps the
+    // wider default padding.
+    val sectionGap =
+        if (edith) EdithSectionGap else QuickSettingsShade.Dimensions.VerticalPadding
     if (mediaInRow) {
         Column(
-            verticalArrangement = spacedBy(QuickSettingsShade.Dimensions.VerticalPadding),
+            verticalArrangement = spacedBy(sectionGap),
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier.element(Elements.QuickSettingsContent),
         ) {
@@ -248,7 +277,7 @@ private fun ContentScope.QuickSettingsPanelLayout(
         }
     } else {
         Column(
-            verticalArrangement = spacedBy(QuickSettingsShade.Dimensions.VerticalPadding),
+            verticalArrangement = spacedBy(sectionGap),
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = modifier,
         ) {
@@ -256,7 +285,7 @@ private fun ContentScope.QuickSettingsPanelLayout(
             // place with the QQS card during the Shade<->QS transition instead of being gated by
             // the late QuickSettingsContent fade.
             Column(
-                verticalArrangement = spacedBy(QuickSettingsShade.Dimensions.VerticalPadding),
+                verticalArrangement = spacedBy(sectionGap),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.element(Elements.QuickSettingsContent),
             ) {
@@ -269,3 +298,11 @@ private fun ContentScope.QuickSettingsPanelLayout(
         }
     }
 }
+
+/**
+ * Vertical gap between the sections of the Edith Quick Settings style (Quick Actions, brightness,
+ * volume and the tile grid). Tighter than the stock padding so the stack reads as one group; the
+ * sliders' own vertical padding and the brightness top margin are zeroed in this style so this is
+ * the exact gap between every section.
+ */
+private val EdithSectionGap = 12.dp

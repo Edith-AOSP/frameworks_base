@@ -448,6 +448,7 @@ private fun ContentScope.QuickSettingsLayout(
                             hapticsViewModelFactory =
                                 volumeSliderViewModel.getSliderHapticsViewModelFactory(),
                             dimensions = QuickSettingsShade.Dimensions.VolumeSliderDimensions,
+                            iconAtStart = true,
                         )
                         Spacer(Modifier.width(8.dp))
                         IconButton(

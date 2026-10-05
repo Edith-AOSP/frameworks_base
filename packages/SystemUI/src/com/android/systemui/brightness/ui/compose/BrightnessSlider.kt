@@ -174,12 +174,13 @@ fun BrightnessSlider(
     val activeIconColor = colors.activeTickColor
     val iconSize = dimensions.iconSize
     val inactiveIconColor = colors.inactiveTickColor
-    // Offset from the right
+    // Draws the track icon with its LEFT edge at [offset.x] (mirrored to a right edge in RTL),
+    // vertically centered at [Offset.y].
     val trackIcon: DrawScope.(Offset, Color, Float) -> Unit = remember {
         { offset, color, alpha ->
             val rtl = layoutDirection == LayoutDirection.Rtl
             scale(if (rtl) -1f else 1f, 1f) {
-                translate(offset.x - IconPadding.toPx() - iconSize.toSize().width, offset.y) {
+                translate(offset.x, offset.y) {
                     with(painter) {
                         draw(
                             iconSize.toSize(),
@@ -281,34 +282,31 @@ fun BrightnessSlider(
                             drawContent()
 
                             val yOffset = size.height / 2 - iconSize.toSize().height / 2
-                            val activeTrackStart = 0f
-                            val activeTrackEnd =
-                                size.width * sliderState.coercedValueAsFraction -
-                                    ThumbTrackGapSize.toPx()
-                            val inactiveTrackStart = activeTrackEnd + ThumbTrackGapSize.toPx() * 2
-                            val inactiveTrackEnd = size.width
+                            val thumbX = size.width * sliderState.coercedValueAsFraction
+                            val iconWidth = iconSize.toSize().width
+                            // The icon is drawn with its left edge at the anchor x.
+                            val iconFitsInFill =
+                                thumbX - ThumbTrackGapSize.toPx() - IconPadding.toPx() * 2 >
+                                    iconWidth
 
-                            val activeTrackWidth = activeTrackEnd - activeTrackStart
-                            val inactiveTrackWidth = inactiveTrackEnd - inactiveTrackStart
-
-                            if (
-                                iconSize.toSize().width <
-                                    inactiveTrackWidth - IconPadding.toPx() * 2
-                            ) {
-                                showIconActive = false
-                                trackIcon(
-                                    Offset(inactiveTrackEnd, yOffset),
-                                    inactiveIconColor,
-                                    iconInactiveAlphaAnimatable.value,
-                                )
-                            } else if (
-                                iconSize.toSize().width < activeTrackWidth - IconPadding.toPx() * 2
-                            ) {
+                            if (iconFitsInFill) {
+                                // Solid icon pinned to the start of the track.
                                 showIconActive = true
                                 trackIcon(
-                                    Offset(activeTrackEnd, yOffset),
+                                    Offset(IconPadding.toPx(), yOffset),
                                     activeIconColor,
                                     iconActiveAlphaAnimatable.value,
+                                )
+                            } else {
+                                // Dimmed icon just after the thumb, on the empty portion.
+                                showIconActive = false
+                                trackIcon(
+                                    Offset(
+                                        thumbX + ThumbTrackGapSize.toPx() + IconPadding.toPx(),
+                                        yOffset,
+                                    ),
+                                    inactiveIconColor,
+                                    iconInactiveAlphaAnimatable.value,
                                 )
                             }
                         },

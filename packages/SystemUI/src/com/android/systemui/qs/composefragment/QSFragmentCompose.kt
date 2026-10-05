@@ -941,6 +941,7 @@ constructor(
                                             dimensions =
                                                 QuickSettingsShade.Dimensions
                                                     .VolumeSliderDimensions,
+                                            iconAtStart = true,
                                         )
                                     }
                                 }

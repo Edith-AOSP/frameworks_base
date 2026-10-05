@@ -20,7 +20,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -36,23 +41,28 @@ import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState as MaterialSliderState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.android.compose.PlatformSliderColors
 import com.android.systemui.common.shared.colors.SystemUISliderColors
+import com.android.systemui.common.shared.model.Icon as IconModel
 import com.android.systemui.common.ui.compose.Icon
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.haptics.slider.compose.ui.SliderHapticsViewModel
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
+import com.android.systemui.volume.dialog.sliders.ui.compose.SliderIconsState
 import com.android.systemui.volume.dialog.sliders.ui.compose.SliderTrack
 import com.android.systemui.volume.haptics.ui.VolumeHapticsConfigsProvider
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.SliderState
@@ -77,6 +87,12 @@ fun VolumeSlider(
     showLabel: Boolean = true,
     dimensions: VolumeSliderDimensions = VolumeSliderDimensions.Defaults,
     materialSliderColors: SliderColors = SystemUISliderColors.Defaults,
+    /**
+     * Whether the track icon is drawn at the start of the track (the left edge in LTR, mirrored to
+     * the right edge in RTL) instead of the end. Quick Settings places it at the start to match the
+     * brightness slider; the volume dialog keeps it at the end.
+     */
+    iconAtStart: Boolean = false,
 ) {
     Column(
         modifier =
@@ -118,12 +134,39 @@ fun VolumeSlider(
                             stateDescription = state.a11yStateDescription,
                         ),
                     track = { sliderState ->
-                        SliderTrack(
-                            sliderState = sliderState,
-                            colors = materialSliderColors,
-                            isEnabled = state.isEnabled,
-                            trackSize = dimensions.trackHeight,
-                            activeTrackEndIcon =
+                        // Quick Settings places the icon at the start of the track (solid when the
+                        // fill can contain it, dimmed just after the thumb otherwise), matching the
+                        // brightness slider. The shared SliderTrack start-icon slots hug the very
+                        // edge and don't inset, so draw the icon ourselves. The volume dialog keeps
+                        // the shared end icons.
+                        if (iconAtStart) {
+                            BoxWithConstraints(
+                                Modifier.fillMaxWidth().height(dimensions.trackHeight)
+                            ) {
+                                SliderTrack(
+                                    sliderState = sliderState,
+                                    colors = materialSliderColors,
+                                    isEnabled = state.isEnabled,
+                                    trackSize = dimensions.trackHeight,
+                                    trackCornerSize = SliderTrackRoundedCorner,
+                                )
+                                val icon = state.icon
+                                if (icon != null) {
+                                    StartTrackIcon(
+                                        icon = icon,
+                                        state = sliderState,
+                                        trackWidth = maxWidth,
+                                        iconSize = dimensions.iconSize,
+                                        colors = materialSliderColors,
+                                        isEnabled = state.isEnabled,
+                                    )
+                                }
+                            }
+                        } else {
+                            fun endIconSlot(
+                                tag: String,
+                                isVisible: (SliderIconsState) -> Boolean,
+                            ): (@Composable BoxScope.(SliderIconsState) -> Unit)? =
                                 state.icon?.let { icon ->
                                     { iconsState ->
                                         SliderIcon(
@@ -133,38 +176,29 @@ fun VolumeSlider(
                                                     tint = null,
                                                     modifier =
                                                         Modifier.size(dimensions.iconSize)
-                                                            .testTag(
-                                                                VolumeSlidersMotionTestKeys
-                                                                    .ACTIVE_ICON_TAG
-                                                            ),
+                                                            .testTag(tag),
                                                 )
                                             },
-                                            isVisible = !iconsState.isInactiveTrackEndIconVisible,
+                                            isVisible = isVisible(iconsState),
                                         )
                                     }
-                                },
-                            inactiveTrackEndIcon =
-                                state.icon?.let { icon ->
-                                    { iconsState ->
-                                        SliderIcon(
-                                            icon = {
-                                                Icon(
-                                                    icon = icon,
-                                                    tint = null,
-                                                    modifier =
-                                                        Modifier.size(dimensions.iconSize)
-                                                            .testTag(
-                                                                VolumeSlidersMotionTestKeys
-                                                                    .INACTIVE_ICON_TAG
-                                                            ),
-                                                )
-                                            },
-                                            isVisible = iconsState.isInactiveTrackEndIconVisible,
-                                        )
-                                    }
-                                },
-                            trackCornerSize = SliderTrackRoundedCorner,
-                        )
+                                }
+                            SliderTrack(
+                                sliderState = sliderState,
+                                colors = materialSliderColors,
+                                isEnabled = state.isEnabled,
+                                trackSize = dimensions.trackHeight,
+                                activeTrackEndIcon =
+                                    endIconSlot(VolumeSlidersMotionTestKeys.ACTIVE_ICON_TAG) {
+                                        !it.isInactiveTrackEndIconVisible
+                                    },
+                                inactiveTrackEndIcon =
+                                    endIconSlot(VolumeSlidersMotionTestKeys.INACTIVE_ICON_TAG) {
+                                        it.isInactiveTrackEndIconVisible
+                                    },
+                                trackCornerSize = SliderTrackRoundedCorner,
+                            )
+                        }
                     },
                     thumb = { sliderState, interactionSource ->
                         SliderDefaults.Thumb(
@@ -228,6 +262,72 @@ object VolumeSlidersMotionTestKeys {
 
 private object InternalDimensions {
     val SliderTrackRoundedCorner = 12.dp
+    val IconPadding = 6.dp
+    val ThumbTrackGapSize = 6.dp
+}
+
+/**
+ * Draws the Quick Settings volume icon using the same placement rules as the brightness slider: the
+ * icon's left edge is pinned at [InternalDimensions.IconPadding] (the start; mirrored to the right
+ * edge in RTL) with the active tint when the filled portion is wide enough to contain it, and just
+ * after the thumb with the inactive tint otherwise.
+ */
+@Composable
+private fun BoxWithConstraintsScope.StartTrackIcon(
+    icon: IconModel,
+    state: MaterialSliderState,
+    trackWidth: Dp,
+    iconSize: Dp,
+    colors: SliderColors,
+    isEnabled: Boolean,
+) {
+    val fraction = state.coercedValueAsFraction
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    // The track shares the brightness slider's logical (LTR) coordinate space: the thumb travels
+    // from the start edge, so its x is trackWidth * fraction. The icon is mirrored for RTL the same
+    // way the brightness icon is (around the track centre), not by mirroring the thumb position.
+    val thumbX = trackWidth * fraction
+    val iconFitsInFill =
+        thumbX - InternalDimensions.ThumbTrackGapSize - InternalDimensions.IconPadding * 2 >
+            iconSize
+
+    val atStart = iconFitsInFill
+    // Left edge of the icon in logical coordinates (start = left).
+    val xLogical =
+        if (atStart) {
+            InternalDimensions.IconPadding
+        } else {
+            // Just after the thumb, toward the end.
+            thumbX + InternalDimensions.ThumbTrackGapSize + InternalDimensions.IconPadding
+        }
+    // Signed translation from the track centre to the icon's centre. The icon is anchored at
+    // Alignment.Center. Use absoluteOffset (not offset) so the sign is applied literally:
+    // Modifier.offset mirrors the horizontal offset for RTL, which would cancel this mirror. The
+    // logical "start" must land on the visual right in RTL, matching the brightness icon.
+    val centerOffset = xLogical + iconSize / 2 - trackWidth / 2
+
+    val tint =
+        when {
+            !isEnabled -> colors.disabledInactiveTickColor
+            atStart -> colors.activeTickColor
+            else -> colors.inactiveTickColor
+        }
+
+    Icon(
+        icon = icon,
+        tint = tint,
+        modifier =
+            Modifier.align(Alignment.Center)
+                .absoluteOffset(x = if (rtl) -centerOffset else centerOffset)
+                .size(iconSize)
+                .testTag(
+                    if (atStart) {
+                        VolumeSlidersMotionTestKeys.ACTIVE_ICON_TAG
+                    } else {
+                        VolumeSlidersMotionTestKeys.INACTIVE_ICON_TAG
+                    }
+                ),
+    )
 }
 
 data class VolumeSliderDimensions(
