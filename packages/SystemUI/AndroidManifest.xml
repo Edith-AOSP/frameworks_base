@@ -607,7 +607,8 @@
                 android:foregroundServiceType="systemExempted"/>
 
         <receiver android:name=".SysuiRestartReceiver"
-            android:exported="false">
+            android:exported="true"
+            android:permission="android.permission.FORCE_STOP_PACKAGES">
             <intent-filter>
                 <action android:name="com.android.systemui.action.RESTART" />
 
