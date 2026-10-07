@@ -62,6 +62,20 @@ class FakeAuthenticationRepository(private val currentTimeMs: () -> Long) :
     override val isAutoConfirmFeatureEnabled: StateFlow<Boolean> =
         _isAutoConfirmFeatureEnabled.asStateFlow()
 
+    private val _pinLength = MutableStateFlow(DEFAULT_PIN.size)
+    override val pinLength: StateFlow<Int> = _pinLength.asStateFlow()
+
+    /**
+     * When non-null, [getPinLength] and [pinLength] report this value instead of deriving the length
+     * from the PIN. Use [LockPatternUtils.PIN_LENGTH_UNAVAILABLE] to simulate the PIN length being
+     * unknown (e.g. right after a reboot before the first successful unlock).
+     */
+    var pinLengthOverride: Int? = null
+        set(value) {
+            field = value
+            value?.let { _pinLength.value = it }
+        }
+
     private val _authenticationMethod =
         MutableStateFlow<AuthenticationMethodModel>(DEFAULT_AUTHENTICATION_METHOD)
     override val authenticationMethod: StateFlow<AuthenticationMethodModel> =
@@ -118,6 +132,7 @@ class FakeAuthenticationRepository(private val currentTimeMs: () -> Long) :
 
     fun overrideCredential(pin: List<Int>) {
         credentialOverride = pin
+        if (pinLengthOverride == null) _pinLength.value = pin.size
     }
 
     override suspend fun reportAuthenticationAttempt(
@@ -168,7 +183,7 @@ class FakeAuthenticationRepository(private val currentTimeMs: () -> Long) :
         profileWithMinFailedUnlockAttemptsForWipe
 
     override suspend fun getPinLength(): Int {
-        return (credentialOverride ?: DEFAULT_PIN).size
+        return _pinLength.value
     }
 
     fun setAutoConfirmFeatureEnabled(isEnabled: Boolean) {

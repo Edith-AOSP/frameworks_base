@@ -148,6 +148,13 @@ interface AuthenticationRepository {
     /** The minimal length of a password. */
     val minPasswordLength: Int
 
+    /**
+     * The length of the current user's PIN, or [LockPatternUtils.PIN_LENGTH_UNAVAILABLE] if it isn't
+     * known yet (e.g. before the first successful unlock after a reboot, when auto-confirm is
+     * disabled).
+     */
+    val pinLength: StateFlow<Int>
+
     /** Whether the "enhanced PIN privacy" setting is enabled for the current user. */
     val isPinEnhancedPrivacyEnabled: StateFlow<Boolean>
 
@@ -277,6 +284,12 @@ constructor(
             initialValue =
                 lockPatternUtils.isAutoPinConfirmEnabled(userRepository.getSelectedUserInfo().id),
             getFreshValue = lockPatternUtils::isAutoPinConfirmEnabled,
+        )
+
+    override val pinLength: StateFlow<Int> =
+        refreshingFlow(
+            initialValue = LockPatternUtils.PIN_LENGTH_UNAVAILABLE,
+            getFreshValue = lockPatternUtils::getPinLength,
         )
 
     override val authenticationMethod: StateFlow<AuthenticationMethodModel> =
