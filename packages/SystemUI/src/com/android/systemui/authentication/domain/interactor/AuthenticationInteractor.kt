@@ -98,12 +98,21 @@ constructor(
      * [hintedPinLength].
      */
     val isAutoConfirmEnabled: StateFlow<Boolean> =
-        combine(repository.isAutoConfirmFeatureEnabled, repository.hasLockoutOccurred) {
-                featureEnabled,
-                hasLockoutOccurred ->
+        combine(
+                repository.isAutoConfirmFeatureEnabled,
+                repository.hasLockoutOccurred,
+                repository.pinLength,
+            ) { featureEnabled, hasLockoutOccurred, pinLength ->
                 // Disable auto-confirm if lockout occurred since the last successful
                 // authentication attempt.
-                featureEnabled && !hasLockoutOccurred
+                // Also disable it when the PIN length isn't known yet (PIN_LENGTH_UNAVAILABLE).
+                // Without a known length we can't tell when the input is complete, so
+                // auto-submitting every digit would send partial PINs that get rejected as
+                // "Credential is too short" (b/ showing an incorrect-PIN error on the first key
+                // press). The confirm button must be shown in that case.
+                featureEnabled &&
+                    !hasLockoutOccurred &&
+                    pinLength != LockPatternUtils.PIN_LENGTH_UNAVAILABLE
             }
             .stateIn(
                 scope = applicationScope,
@@ -384,7 +393,16 @@ constructor(
         return when (this) {
             Pattern -> inputLength < repository.minPatternLength
             Password -> inputLength < repository.minPasswordLength
-            Pin -> inputLength < repository.getPinLength()
+            Pin -> {
+                val pinLength = repository.getPinLength()
+                // PIN_LENGTH_UNAVAILABLE (-1) means the real PIN length isn't known yet, which
+                // happens before the user has completed a successful unlock (or when auto-confirm
+                // is disabled). In that case we can't tell when the input is complete, so treat
+                // it as "too short". For PIN, "too short" only skips auto-confirm attempts (see
+                // shouldSkipAuthenticationAttempt), so an explicit confirm still works. This is a
+                // defense-in-depth guard alongside the pin-length check in isAutoConfirmEnabled.
+                pinLength <= 0 || inputLength < pinLength
+            }
             else -> false
         }
     }

@@ -272,6 +272,46 @@ class AuthenticationInteractorTest : SysuiTestCase() {
         }
 
     @Test
+    fun tryAutoConfirm_withPinLengthUnavailable_singleDigit_returnsSkipped() =
+        kosmos.runTest {
+            val isAutoConfirmEnabled by collectLastValue(underTest.isAutoConfirmEnabled)
+            kosmos.fakeAuthenticationRepository.apply {
+                setAuthenticationMethod(Pin)
+                setAutoConfirmFeatureEnabled(true)
+                // Simulates the PIN length being unknown (e.g. right after a reboot before the
+                // first successful unlock), which is reported as PIN_LENGTH_UNAVAILABLE.
+                pinLengthOverride = LockPatternUtils.PIN_LENGTH_UNAVAILABLE
+            }
+            // Auto-confirm must be disabled while the PIN length is unknown, so that partial PINs
+            // are not auto-submitted and the confirm button stays available.
+            assertThat(isAutoConfirmEnabled).isFalse()
+
+            // A single digit must NOT be auto-submitted; previously the unavailable length (-1)
+            // made "inputLength < pinLength" false, so the attempt proceeded and was rejected by
+            // LockSettingsService as "Credential is too short", showing an incorrect-PIN error on
+            // the first key press.
+            assertSkipped(underTest.authenticate(listOf(1), tryAutoConfirm = true))
+            assertThat(underTest.lockoutEndTime).isNull()
+            assertThat(kosmos.fakeAuthenticationRepository.lockoutStartedReportCount).isEqualTo(0)
+        }
+
+    @Test
+    fun tryConfirm_withPinLengthUnavailable_correctPin_stillSucceeds() =
+        kosmos.runTest {
+            kosmos.fakeAuthenticationRepository.apply {
+                setAuthenticationMethod(Pin)
+                setAutoConfirmFeatureEnabled(true)
+                pinLengthOverride = LockPatternUtils.PIN_LENGTH_UNAVAILABLE
+            }
+
+            // Even when the PIN length is unknown, an explicit (non auto-confirm) attempt with the
+            // correct PIN must still be verified.
+            assertSucceeded(
+                underTest.authenticate(FakeAuthenticationRepository.DEFAULT_PIN)
+            )
+        }
+
+    @Test
     fun tryAutoConfirm_withAutoConfirmLongerPin_returnsFalse() =
         kosmos.runTest {
             val isAutoConfirmEnabled by collectLastValue(underTest.isAutoConfirmEnabled)
