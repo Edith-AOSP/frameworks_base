@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.notification.shelf.ui.viewmodel
 
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.NotificationShelf
 import com.android.systemui.statusbar.notification.row.ui.viewmodel.ActivatableNotificationViewModel
@@ -35,6 +36,7 @@ constructor(
     private val interactor: NotificationShelfInteractor,
     windowRootViewBlurInteractor: WindowRootViewBlurInteractor,
     activatableViewModel: ActivatableNotificationViewModel,
+    mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
 ) : ActivatableNotificationViewModel by activatableViewModel {
     /** Is the shelf allowed to be clickable when it has content? */
     val isClickable: Flow<Boolean>
@@ -54,6 +56,12 @@ constructor(
     }
 
     val isBlurSupported: Flow<Boolean> = windowRootViewBlurInteractor.isBlurCurrentlySupported
+
+    /**
+     * Whether the Edith lock screen media player is expanded. While it is, the shelf (the row of
+     * notification icons in compact mode) is hidden: the expanded player owns the screen.
+     */
+    val isMediaExpanded: Flow<Boolean> = mediaExpansionInteractor.isExpandedFlow
 
     /** Notifies that the user has clicked the shelf. */
     fun onShelfClicked() {

@@ -100,6 +100,7 @@ public class NotificationShelf extends ActivatableNotificationView {
     private boolean mInteractive;
     private boolean mAnimationsEnabled = true;
     private boolean mShowNotificationShelf;
+    private boolean mMediaExpanded;
     private final Rect mClipRect = new Rect();
     private int mIndexOfFirstViewInShelf = -1;
     private float mCornerAnimationDistance;
@@ -567,6 +568,7 @@ public class NotificationShelf extends ActivatableNotificationView {
         boolean isHidden = getViewState().hidden
                 || clipTopAmount >= getIntrinsicHeight()
                 || !mShowNotificationShelf
+                || mMediaExpanded
                 || numViewsInShelf < 1f;
 
         setActualWidth(calcActualWidth(numViewsInShelf));
@@ -1107,6 +1109,21 @@ public class NotificationShelf extends ActivatableNotificationView {
     public void setCanInteract(boolean canInteract) {
         mCanInteract = canInteract;
         updateInteractiveness();
+    }
+
+    /**
+     * Hides the shelf (and its notification icons) while the Edith lock screen media player is
+     * expanded, which owns the screen and replaces the notification icons with its own controls.
+     */
+    public void setMediaExpanded(boolean mediaExpanded) {
+        if (mMediaExpanded != mediaExpanded) {
+            mMediaExpanded = mediaExpanded;
+            if (mAmbientState != null) {
+                // updateAppearance() recomputes isHidden and applies the visibility. Guarded
+                // because the flag can arrive before the shelf is bound to its host layout.
+                updateAppearance();
+            }
+        }
     }
 
     public void setIndexOfFirstViewInShelf(ExpandableView firstViewInShelf) {

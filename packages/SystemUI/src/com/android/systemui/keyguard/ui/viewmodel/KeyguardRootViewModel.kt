@@ -43,6 +43,7 @@ import com.android.systemui.keyguard.shared.model.TransitionState.RUNNING
 import com.android.systemui.keyguard.shared.model.TransitionState.STARTED
 import com.android.systemui.keyguard.ui.StateToValue
 import com.android.systemui.minmode.MinModeManager
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.scene.shared.model.Overlays
 import com.android.systemui.scene.shared.model.Scenes
@@ -158,6 +159,7 @@ constructor(
     private val toDozingEndStateTransitionViewModel: ToDozingEndStateTransitionViewModel,
     private val screenOffAnimationController: ScreenOffAnimationController,
     private val aodBurnInViewModel: AodBurnInViewModel,
+    private val mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
     shadeInteractor: ShadeInteractor,
     dumpManager: DumpManager,
     private val minModeManager: Optional<MinModeManager>,
@@ -456,6 +458,7 @@ constructor(
                 areNotifsFullyHiddenAnimated(),
                 isPulseExpandingAnimated(),
                 aodNotificationIconViewModel.icons.map { it.visibleIcons.isNotEmpty() },
+                mediaExpansionInteractor.isExpandedFlow,
             ) { flows ->
                 val goneToAodTransitionRunning = flows[0] as Boolean
                 val isOnLockscreen = flows[1] as Boolean
@@ -464,8 +467,12 @@ constructor(
                 val notifsFullyHidden = flows[4] as AnimatedValue<Boolean>
                 val pulseExpanding = flows[5] as AnimatedValue<Boolean>
                 val hasAodIcons = flows[6] as Boolean
+                val isMediaExpanded = flows[7] as Boolean
 
                 when {
+                    // Hide the AOD icons while the Edith media player is expanded (it owns the
+                    // screen), including during the lockscreen -> shade transition.
+                    isMediaExpanded -> AnimatedValue.NotAnimating(false)
                     // Hide the AOD icons if we're not in the KEYGUARD state unless the screen off
                     // animation is playing, in which case we want them to be visible if we're
                     // animating in the AOD UI and will be switching to KEYGUARD shortly.

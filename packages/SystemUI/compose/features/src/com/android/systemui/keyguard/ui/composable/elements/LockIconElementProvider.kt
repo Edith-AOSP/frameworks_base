@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -58,6 +59,7 @@ import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenEl
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementKeys
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementProvider
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenScope
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shared.customization.data.SensorLocation
@@ -87,6 +89,7 @@ constructor(
     private val vibratorHelper: Lazy<VibratorHelper>,
     private val msdlPlayer: Lazy<MSDLPlayer>,
     @LongPressTouchLog private val logBuffer: LogBuffer,
+    private val mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
 ) : LockscreenElementProvider {
     override val elements: List<LockscreenElement> by lazy { listOf(LockIconElement()) }
 
@@ -133,7 +136,11 @@ constructor(
                     }
             },
             modifier =
-                modifier.layout { measurable, _ ->
+                modifier
+                    // The expanded lock screen media player owns the screen, so hide the device
+                    // entry icon (lock/unlock affordance) while it is expanded.
+                    .graphicsLayer { alpha = if (mediaExpansionInteractor.isExpanded) 0f else 1f }
+                    .layout { measurable, _ ->
                     val placeable =
                         measurable.measure(
                             Constraints.fixed(
