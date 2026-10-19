@@ -27,7 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -48,6 +48,7 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
@@ -71,8 +72,9 @@ import kotlinx.coroutines.launch
  * `drawArtBackground = false`), so this layer is the only art: there is never an art-less frame —
  * which is what used to flicker the wallpaper on tap — and the same art visibly morphs in and out.
  *
- * The media content is composed below the art and is offset by the *animated* art height, so it
- * slides down/up as the art grows/shrinks.
+ * The controls are the anchor: they are pinned to the bottom of the space the lock screen leaves
+ * for the player, and the art is bottom-aligned just above them, so the art is what shrinks when
+ * room runs short and the controls never move or get squashed.
  *
  * Collapsing: tapping the art, or dragging down.
  */
@@ -80,6 +82,11 @@ import kotlinx.coroutines.launch
 fun ExpandedMediaArt(
     card: MediaCardViewModel,
     progress: Animatable<Float, AnimationVector1D>,
+    // Drives the block height and the controls' slide at the morph spring's frequency, critically
+    // damped. The morph spring's tail crosses its target every half period, and in the block height
+    // it wobbled the layout by a few dp just after the morph had settled, shaking the controls and
+    // the notification stack below.
+    layoutProgress: Animatable<Float, AnimationVector1D>,
     onCollapse: () -> Unit,
     onProgressChanged: (Float) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -89,14 +96,15 @@ fun ExpandedMediaArt(
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    // M3 expressive spatial spring, tuned slower + bouncier for the media morph: a lower damping
-    // ratio (more overshoot/bounce) and lower stiffness (longer, slower settle) than the default
-    // expressive spatial spec. Captured here because motionScheme is a @Composable read and cannot
-    // be accessed inside the drag coroutine lambdas below.
+    // The media morph spring, shared with the tap-to-expand animation in `Media.kt`, so a drag
+    // release and a tap settle identically. Held in a val because the drag coroutine lambdas below
+    // are not composable.
     val spatialSpec =
-        spring<Float>(dampingRatio = MEDIA_SPRING_DAMPING, stiffness = MEDIA_SPRING_STIFFNESS)
+        spring<Float>(dampingRatio = Media.MORPH_SPRING_DAMPING, stiffness = Media.MORPH_SPRING_STIFFNESS)
+    // Critically damped at the same frequency, so the layout arrives without crossing its target.
+    val layoutSpec = spring<Float>(dampingRatio = 1f, stiffness = Media.MORPH_SPRING_STIFFNESS)
 
-    // Report progress so the ambient backdrop can track it.
+    // The ambient backdrop tracks this progress.
     LaunchedEffect(progress) {
         snapshotFlow { progress.value }.collect(onProgressChanged)
     }
@@ -119,40 +127,64 @@ fun ExpandedMediaArt(
         val contentHeight =
             if (contentHeightPx > 0) with(density) { contentHeightPx.toDp() } else collapsedHeight
 
-        // Space above the controls that the art can use.
-        val artSpace = (availableHeight - contentHeight).coerceAtLeast(0.dp)
         val artGap = dimensionResource(R.dimen.edith_media_art_controls_gap)
 
-        // Raw (unclamped) progress: the M3 expressive spatial spring overshoots its rest, and we let
-        // that overshoot drive the geometry so the morph lands with a real, physical bounce.
+        // Two progresses, one per spring: the bouncy morph spring drives the art, the critically
+        // damped layout spring drives the block height and the controls' slide.
         val raw = progress.value
-        val clamped = raw.coerceIn(0f, 1f)
+        val clamped = layoutProgress.value.coerceIn(0f, 1f)
 
-        // Square art side: one scalar drives both dimensions, so the art can only shrink — it never
-        // stretches out of its 1:1 aspect ratio — and it never takes more than the slot leaves after
-        // the gap. This is what makes the art shrink instead of pushing the controls off the bottom
-        // when the clock/smartspace above the player take more room.
-        val squareSide =
-            (fullWidth - sideMargin * 2)
-                .coerceAtMost((artSpace - artGap).coerceAtLeast(0.dp))
+        // The morph spring overshoots in both directions. The forward overshoot (progress > 1) is
+        // the art bouncing past its rest square and is kept; the backward one (below 0 while the
+        // collapse settles) would shrink the art under the collapsed card and pop back, so the art
+        // geometry stops at the collapsed state.
+        val artProgress = raw.coerceAtLeast(0f)
+
+        // The controls are the anchor, not the art: the player is as tall as the space the lock
+        // screen leaves for it and no taller, so with slack the block ends right below the controls
+        // instead of stretching them to the bottom of the screen.
+        val artMaxSide = (fullWidth - sideMargin * 2).coerceAtLeast(0.dp)
+        val naturalHeight = artMaxSide + artGap + contentHeight
+        val expandedBlockHeight = naturalHeight.coerceAtMost(availableHeight)
+
+        // The controls' top when expanded, measured up from the bottom of the block, so the art
+        // never moves them. Height the art does not use stays in the gap above them; when space runs
+        // short it is the art that gives way, still 1:1.
+        val expandedContentTop = (expandedBlockHeight - contentHeight).coerceAtLeast(0.dp)
+        val artSpace = (expandedContentTop - artGap).coerceAtLeast(0.dp)
+        val squareSide = artMaxSide.coerceAtMost(artSpace).coerceAtLeast(0.dp)
+
+        // Animated art geometry. The sizes are clamped only to stay non-negative (Compose layout
+        // would crash); the spring's forward overshoot is kept in the dimensions that can grow.
+        val artHeight = (collapsedHeight + (squareSide - collapsedHeight) * artProgress).coerceAtLeast(0.dp)
+        val artWidth = (fullWidth + (squareSide - fullWidth) * artProgress).coerceAtLeast(0.dp)
+
+        // Bottom-anchored art: its *bottom* edge sits [artGap] above the controls, so when the art is
+        // capped by height it shrinks towards the controls instead of drifting up, and the spring's
+        // overshoot grows it upwards rather than into them.
+        val artTop = (artSpace - artHeight) * clamped
+
+        // The block animates from the collapsed card's height to the anchored height above.
+        val blockHeight =
+            (collapsedHeight + (expandedBlockHeight - collapsedHeight) * clamped)
                 .coerceAtLeast(0.dp)
 
-        // Animated art geometry. Clamp only to keep sizes non-negative (Compose layout would crash),
-        // which still preserves the spring's overshoot in the dimensions that can grow.
-        val artHeight = (collapsedHeight + (squareSide - collapsedHeight) * raw).coerceAtLeast(0.dp)
-        val artWidth = (fullWidth + (squareSide - fullWidth) * raw).coerceAtLeast(0.dp)
-
-        // The block is content-sized, not slot-sized: the art plus the controls, plus the gap between
-        // them. Sizing it to the available height instead would turn any slack into dead space above
-        // the art — which is what pushed the whole player to the bottom of the screen when the lock
-        // screen was measured with a larger constraint (e.g. right after coming out of AOD).
-
         // The controls slide down as the player expands: at progress 0 they sit on top of the art
-        // (the collapsed card, art as the card backing); at progress 1 they are fully below it,
-        // separated by [artGap].
-        val contentTop = (artHeight + artGap) * clamped
+        // (the collapsed card, art as the card backing); at progress 1 they are at the bottom of the
+        // block, separated from the art by [artGap].
+        val contentTop = expandedContentTop * clamped
 
-        Box(Modifier.fillMaxWidth()) {
+        // The animated block height is reported without shrinking the constraints the children are
+        // measured with. `height(blockHeight)` would cap the controls at the block's current height,
+        // so early in the expansion they would measure short, that short height would feed back into
+        // [contentHeight], and the art would grow in response.
+        Box(
+            modifier =
+                Modifier.fillMaxWidth().layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    layout(placeable.width, blockHeight.roundToPx()) { placeable.place(0, 0) }
+                }
+        ) {
             // Art layer, drawn first so it is behind the controls (matching the collapsed card).
             MorphingArt(
                 image = card.background,
@@ -161,29 +193,40 @@ fun ExpandedMediaArt(
                 artWidth = artWidth,
                 artHeight = artHeight,
                 cornerRadius = cornerRadius,
-                modifier = Modifier,
+                modifier = Modifier.offset(y = artTop),
                 onCollapse = onCollapse,
                 onDrag = { dy ->
+                    val next = (progress.value - dy / DRAG_RANGE_PX).coerceIn(0f, 1f)
                     scope.launch {
-                        progress.snapTo((progress.value - dy / DRAG_RANGE_PX).coerceIn(0f, 1f))
+                        progress.snapTo(next)
+                        layoutProgress.snapTo(next)
                     }
                 },
                 onDragEnd = {
-                    if (progress.value < DRAG_COLLAPSE_THRESHOLD) {
-                        scope.launch {
-                            progress.animateTo(0f, spatialSpec)
-                        }
+                    val target = if (progress.value < DRAG_COLLAPSE_THRESHOLD) 0f else 1f
+                    scope.launch {
+                        launch { progress.animateTo(target, spatialSpec) }
+                        launch { layoutProgress.animateTo(target, layoutSpec) }
+                    }
+                    if (target == 0f) {
                         onCollapse()
-                    } else {
-                        scope.launch {
-                            progress.animateTo(1f, spatialSpec)
-                        }
                     }
                 },
             )
 
-            Box(Modifier.fillMaxWidth().padding(top = contentTop)) {
-                // Measured *without* the padding above, so this is the controls' own height.
+            Box(
+                modifier =
+                    Modifier.fillMaxWidth()
+                        // The controls are measured with the block's own constraints and only placed
+                        // at [contentTop]. Measuring them inside an animated top padding gave them a
+                        // shorter constraint as the art grew, which squashed them and fed that height
+                        // back into the art size.
+                        .layout { measurable, constraints ->
+                            val placeable = measurable.measure(constraints)
+                            val top = contentTop.roundToPx()
+                            layout(placeable.width, placeable.height) { placeable.place(0, top) }
+                        }
+            ) {
                 Box(Modifier.onSizeChanged { contentHeightPx = it.height }) { content() }
             }
         }
@@ -192,8 +235,8 @@ fun ExpandedMediaArt(
 
 /**
  * The shared album-art layer: one art box whose width/height/corner radius interpolate with
- * [progress] from the collapsed banner to the expanded square. Its layout height follows the art, so
- * the content below slides with it.
+ * [progress] from the collapsed banner to the expanded square. It is bottom-aligned in the space the
+ * controls leave, so the art shrinks towards the controls rather than pushing them.
  */
 @Composable
 private fun MorphingArt(
@@ -291,7 +334,3 @@ private const val DRAG_RANGE_PX = 600f
 
 /** Progress below which a released drag collapses instead of springing back open. */
 private const val DRAG_COLLAPSE_THRESHOLD = 0.75f
-
-/** Media morph spring: lower damping = bouncier, lower stiffness = slower settle. */
-private const val MEDIA_SPRING_DAMPING = 0.45f
-private const val MEDIA_SPRING_STIFFNESS = 320f

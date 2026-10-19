@@ -265,15 +265,37 @@ fun Media(
             viewModel.currentIndex.coerceIn(0, (viewModel.cards.size - 1).coerceAtLeast(0))
         )
 
-    // Single animated expansion progress (0 = collapsed, 1 = expanded), shared by the morphing art
-    // and the ambient backdrop, so everything stays in sync and the art never disappears (which
-    // used to flicker the wallpaper on tap).
+    // Animated expansion progress (0 = collapsed, 1 = expanded), shared by the morphing art and the
+    // ambient backdrop, so everything stays in sync and the art never disappears (which used to
+    // flicker the wallpaper on tap).
     val expansionProgress = remember { Animatable(if (expanded) 1f else 0f) }
+    // The block height and the controls' slide run at the morph spring's frequency but critically
+    // damped. The morph spring's decaying tail crosses its target every half period, and passing it
+    // through moved the block, the controls and the notification stack below by a few dp just after
+    // the morph had settled.
+    val layoutProgress = remember { Animatable(if (expanded) 1f else 0f) }
     LaunchedEffect(expanded) {
-        expansionProgress.animateTo(
-            targetValue = if (expanded) 1f else 0f,
-            animationSpec = spring(stiffness = Media.PROGRESS_SPRING_STIFFNESS, dampingRatio = Media.PROGRESS_SPRING_DAMPING),
-        )
+        val target = if (expanded) 1f else 0f
+        launch {
+            expansionProgress.animateTo(
+                targetValue = target,
+                animationSpec =
+                    spring(
+                        stiffness = Media.MORPH_SPRING_STIFFNESS,
+                        dampingRatio = Media.MORPH_SPRING_DAMPING,
+                    ),
+            )
+        }
+        launch {
+            layoutProgress.animateTo(
+                targetValue = target,
+                animationSpec =
+                    spring(
+                        stiffness = Media.MORPH_SPRING_STIFFNESS,
+                        dampingRatio = 1f,
+                    ),
+            )
+        }
     }
 
     // The expandable-player presentation is *lock screen only*. Every other host (QS, communal,
@@ -286,6 +308,7 @@ fun Media(
         ExpandedMediaArt(
             card = currentCard,
             progress = expansionProgress,
+            layoutProgress = layoutProgress,
             onCollapse = onCollapse,
             onProgressChanged = onExpansionDragProgress,
             modifier = modifier,
@@ -2674,9 +2697,27 @@ object Media {
     /** Duration of the collapsed <-> expanded lock screen media cross-fade. */
     const val EXPAND_FADE_MILLIS = 220
 
-    /** Spring for the lock screen media expansion morph (shared by the art and the backdrop). */
-    const val PROGRESS_SPRING_STIFFNESS = 400f
-    const val PROGRESS_SPRING_DAMPING = 0.8f
+    /**
+     * Spring for the lock screen media expansion morph, shared by the tap-to-expand transition, the
+     * drag release and the ambient backdrop, so the whole feature moves as one.
+     *
+     * A 500 ms spring with 40% bounce. For mass 1 and no initial velocity the physical spring is
+     *
+     *     stiffness = (2 * PI / durationSeconds)^2
+     *     damping   = (1 - bounce) * 4 * PI / durationSeconds
+     *
+     * so `bounce = 0.4, duration = 500ms` gives `stiffness = (4 * PI)^2 ~= 157.91` and
+     * `damping ~= 15.08`. Compose takes a damping ratio instead of a coefficient, and
+     * `damping / (2 * sqrt(stiffness * mass))` collapses to `1 - bounce`, i.e. **0.6**; stiffness
+     * carries over unchanged because both models are mass-normalised. That is ~12.6 rad/s, ~10%
+     * overshoot, settling in roughly 500 ms.
+     *
+     * The values are written out here rather than read from `MaterialTheme.motionScheme`: the lock
+     * screen is not wrapped in `PlatformTheme` (only the QS fragment is), so the ambient theme would
+     * return the standard scheme instead of the expressive one.
+     */
+    const val MORPH_SPRING_STIFFNESS = 157.91f
+    const val MORPH_SPRING_DAMPING = 0.6f
 
     val DEFAULT_HEIGHT = 176.dp
     val COMPRESSED_HEIGHT = 128.dp
