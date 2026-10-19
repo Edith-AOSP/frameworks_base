@@ -539,11 +539,23 @@ private fun CardCarouselContent(
                 }
 
                 if (pagerState.pageCount > 1) {
+                    // The dots take the shown session's own primary, the colour of its play/pause
+                    // button; the theme primary only covers a session with no artwork-derived
+                    // scheme.
+                    val shownScheme =
+                        viewModel.cards
+                            .getOrNull(
+                                pagerState.currentPage.coerceIn(
+                                    0,
+                                    (viewModel.cards.size - 1).coerceAtLeast(0),
+                                )
+                            )
+                            ?.colorScheme
+                    val dotsColor = shownScheme?.primary ?: MaterialTheme.colorScheme.primary
                     PagerDots(
                         pagerState = pagerState,
-                        // Use the theme primary (not the artwork-derived color).
-                        activeColor = MaterialTheme.colorScheme.primary,
-                        nonActiveColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                        activeColor = dotsColor,
+                        nonActiveColor = dotsColor.copy(alpha = 0.38f),
                         dotSize = 6.dp,
                         spaceSize = 6.dp,
                         modifier =
