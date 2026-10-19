@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -114,6 +115,13 @@ private const val TEST_TAG_TILE_ICON = "qs_tile_icon"
 private const val TEST_TAG_TOGGLE = "qs_tile_toggle_target"
 private const val TEST_TAG_SMALL = "qs_tile_small"
 private const val TEST_TAG_LARGE = "qs_tile_large"
+
+/**
+ * Alpha applied to a tile's inner content (icon and label) so it can fade with the single-tone
+ * shade expansion while the tile's own background stays solid. Defaults to fully opaque, so tiles
+ * outside a provider (e.g. the expanded Quick Settings panel) are unaffected.
+ */
+val LocalTileContentAlpha = staticCompositionLocalOf { 1f }
 
 @Composable
 fun LargeTileContent(

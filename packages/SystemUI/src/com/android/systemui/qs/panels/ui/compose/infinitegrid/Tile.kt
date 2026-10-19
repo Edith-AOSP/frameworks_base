@@ -61,6 +61,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -96,6 +97,7 @@ import com.android.systemui.haptics.msdl.qs.TileHapticsViewModel
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.qs.flags.QsDetailedView
 import com.android.systemui.qs.edith.EdithTileColorOverride
+import com.android.systemui.qs.edith.EdithTileStyle
 import com.android.systemui.qs.edith.EdithTileSwatches
 import com.android.systemui.qs.edith.QuickActionsTileOverride
 import com.android.systemui.qs.edith.QuickActionsTileSwatches
@@ -162,12 +164,7 @@ fun ContentScope.Tile(
     requestToggleTextFeedback: (TileSpec) -> Unit = {},
     detailsViewModel: DetailsViewModel?,
     enableRevealEffect: Boolean = false,
-    edithTileStyle: Boolean = false,
-    edithColorEnabled: Boolean = false,
-    edithSquareSize: Dp? = null,
-    edithTileColorOverride: EdithTileColorOverride? = null,
-    edithQuickActionsTile: Boolean = false,
-    edithQuickActionsOverride: QuickActionsTileOverride? = null,
+    edithStyle: EdithTileStyle = EdithTileStyle.Disabled,
     /**
      * Optional [Expandable] to use as the dialog/activity animation source instead of
      * [TileViewModel.expandable].
@@ -180,6 +177,13 @@ fun ContentScope.Tile(
      */
     expandableOverride: Expandable? = null,
 ) {
+    val edithTileStyle = edithStyle.enabled
+    val edithColorEnabled = edithStyle.colorsEnabled
+    val edithSquareSize = edithStyle.squareSize
+    val edithTileColorOverride = edithStyle.tileColorOverride
+    val edithQuickActionsTile = edithStyle.quickActionsTile
+    val edithQuickActionsOverride = edithStyle.quickActionsOverride
+
     trace(tile.traceName) {
         val currentBounceableInfo by rememberUpdatedState(bounceableInfo)
         val resources = resources()
@@ -205,14 +209,14 @@ fun ContentScope.Tile(
                 // Quick Actions tiles keep stock colors unless the tuner overrides them; they're
                 // not affected by the QS color scheme toggle.
                 edithTileStyle && edithQuickActionsTile ->
-                    TileDefaults.edithQuickActionsTileColors(
+                    edithQuickActionsTileColors(
                         uiState = uiState,
                         iconOnly = iconOnly,
                         override = edithQuickActionsOverride,
                     )
                 // The main grid only goes tertiary when the color scheme toggle is on.
                 edithTileStyle && edithColorEnabled ->
-                    TileDefaults.edithTertiaryTileColors(uiState.visualState, edithTileColorOverride)
+                    edithTertiaryTileColors(uiState.visualState, edithTileColorOverride)
                 else -> TileDefaults.getColorForState(uiState, iconOnly)
             }
         val hapticsViewModel: TileHapticsViewModel =
@@ -397,6 +401,9 @@ fun ContentScope.Tile(
                     fixedSquareSize = edithSquareSize,
                 ) {
                     val iconProvider: Context.() -> Icon = { getTileIcon(icon = icon) }
+                    // Fade the tile's inner content (icon + label) with the single-tone shade
+                    // expansion, leaving the tile's own background solid. 1f outside the shade.
+                    val contentAlpha = LocalTileContentAlpha.current
                     if (iconOnly) {
                         // Edith square tiles are smaller than the standard tile, so scale the icon
                         // to the tile's actual size.
@@ -411,7 +418,7 @@ fun ContentScope.Tile(
                                     color = colors.icon,
                                     size = { iconSize },
                                     modifier =
-                                        Modifier.bounceScale {
+                                        Modifier.graphicsLayer { alpha = contentAlpha }.bounceScale {
                                             currentBounceableInfo.bounceable.iconBounceScale
                                         },
                                 )
@@ -421,9 +428,11 @@ fun ContentScope.Tile(
                                 iconProvider = iconProvider,
                                 color = colors.icon,
                                 modifier =
-                                    Modifier.align(Alignment.Center).bounceScale {
-                                        currentBounceableInfo.bounceable.iconBounceScale
-                                    },
+                                    Modifier.graphicsLayer { alpha = contentAlpha }
+                                        .align(Alignment.Center)
+                                        .bounceScale {
+                                            currentBounceableInfo.bounceable.iconBounceScale
+                                        },
                             )
                         }
                     } else {
@@ -485,7 +494,8 @@ fun ContentScope.Tile(
                             modifier =
                                 Modifier.largeTilePadding(
                                     isDualTarget = uiState.handlesSettingsClick
-                                ),
+                                )
+                                    .graphicsLayer { alpha = contentAlpha },
                         )
                     }
                 }
@@ -562,14 +572,16 @@ fun SmallStaticTile(
     uiState: TileUiState,
     iconProvider: IconProvider,
     modifier: Modifier = Modifier,
-    edithTileStyle: Boolean = false,
-    edithColorEnabled: Boolean = false,
-    edithTileColorOverride: EdithTileColorOverride? = null,
+    edithStyle: EdithTileStyle = EdithTileStyle.Disabled,
     onClick: () -> Unit = {},
 ) {
+    val edithTileStyle = edithStyle.enabled
+    val edithColorEnabled = edithStyle.colorsEnabled
+    val edithTileColorOverride = edithStyle.tileColorOverride
+
     val colors =
         if (edithTileStyle && edithColorEnabled) {
-            TileDefaults.edithTertiaryTileColors(uiState.visualState, edithTileColorOverride)
+            edithTertiaryTileColors(uiState.visualState, edithTileColorOverride)
         } else {
             TileDefaults.getColorForState(uiState = uiState, iconOnly = true)
         }
@@ -731,120 +743,7 @@ private val EdithDualTargetInnerCornerRadius = 10.dp
 /** Tint alpha for the Quick Actions dual-target inner box when the tile colors are overridden. */
 private const val EdithInnerBoxAlpha = 0.24f
 
-private object TileDefaults {
-    /**
-     * Default Edith QS tertiary tile colors, set per-theme via the `edith_qs_tile_*` color
-     * resources (different accent3 tones in `values`/`values-night`):
-     *
-     *  - Dark:  active bg=a3_200, active icon=a3_800, inactive bg=a3_800, inactive icon=a3_100
-     *  - Light: active bg=a3_600, active icon=a3_50,  inactive bg=a3_10,  inactive icon=a3_700
-     *
-     * They alias `@android:color/system_accent3_*`, which are dynamic (theme-aware), so the tiles
-     * follow palette changes (wallpaper / ThemePicker). The inactive background is applied with
-     * [EdithInactiveTileAlpha], matching AOSP's surfaceEffect1, so the wallpaper shows through.
-     * Unavailable tiles use the stock dimmed look.
-     *
-     * @param edithTileColorOverride optional per-slot color overrides from the (debug) color tuner
-     *   in Settings; unset slots fall back to the resource defaults above.
-     */
-    @Composable
-    fun edithTertiaryTileColors(
-        visualState: Int,
-        edithTileColorOverride: EdithTileColorOverride? = null,
-    ): TileColors {
-        if (visualState != STATE_INACTIVE && visualState != STATE_ACTIVE) {
-            // Unavailable (e.g. STATE_UNAVAILABLE): a dimmed neutral surface with a still-visible
-            // glyph, matching the default unavailable tile look.
-            return unavailableTileColors()
-        }
-        val context = LocalContext.current
-        // Read the configuration (assetsSeq matches PlatformTheme) and the dark/light state so the
-        // color resolution below is re-run when the theme changes: a dark<->light toggle changes the
-        // values/values-night resources without necessarily changing assetsSeq, and picking new
-        // colors in ThemePicker changes assetsSeq. Without both keys the tile keeps the previous
-        // mode's color until something else forces a recomposition.
-        val assetsSeq = LocalConfiguration.current.assetsSeq
-        val isDark = isSystemInDarkTheme()
-        val active = visualState == STATE_ACTIVE
-        val inactiveAlpha = edithTileColorOverride?.inactiveAlpha ?: EdithInactiveTileAlpha
-
-        val defaultBgRes =
-            if (active) R.color.edith_qs_tile_active_bg else R.color.edith_qs_tile_inactive_bg
-        val defaultIconRes =
-            if (active) R.color.edith_qs_tile_active_icon else R.color.edith_qs_tile_inactive_icon
-
-        // The override holds a swatch tag; resolve it against the current theme so the tile still
-        // follows palette changes (wallpaper / ThemePicker / dark mode). Keyed on assetsSeq and the
-        // dark/light state so the resolved colors are recomputed when the theme changes.
-        val bgTag =
-            if (active) edithTileColorOverride?.activeBg else edithTileColorOverride?.inactiveBg
-        val iconTag =
-            if (active) edithTileColorOverride?.activeFg else edithTileColorOverride?.inactiveFg
-        val resolved =
-            remember(context, isDark, assetsSeq, bgTag, iconTag, defaultBgRes, defaultIconRes) {
-                val bgArgb =
-                    EdithTileSwatches.resolve(context, bgTag) ?: context.getColor(defaultBgRes)
-                val fgArgb =
-                    EdithTileSwatches.resolve(context, iconTag) ?: context.getColor(defaultIconRes)
-                bgArgb to fgArgb
-            }
-        val bg = Color(resolved.first).copy(alpha = if (active) 1f else inactiveAlpha)
-        val fg = Color(resolved.second)
-        return TileColors(
-            background = bg,
-            iconBackground = bg,
-            label = fg,
-            secondaryLabel = fg,
-            icon = fg,
-        )
-    }
-
-    /**
-     * Colors for the Quick Actions tiles: the stock look, with any tuner overrides layered on top
-     * (resolved through [QuickActionsTileSwatches]). Slots without an override keep their stock
-     * color.
-     */
-    @Composable
-    fun edithQuickActionsTileColors(
-        uiState: TileUiState,
-        iconOnly: Boolean,
-        override: QuickActionsTileOverride? = null,
-    ): TileColors {
-        val stock = getColorForState(uiState, iconOnly)
-        if (override == null || !override.hasAnyColor) {
-            return stock
-        }
-        if (uiState.visualState != STATE_INACTIVE && uiState.visualState != STATE_ACTIVE) {
-            return stock
-        }
-        val context = LocalContext.current
-        // Keyed on assetsSeq and the dark/light state so the resolved colors are recomputed when the
-        // theme changes (a dark<->light toggle may not change assetsSeq).
-        val assetsSeq = LocalConfiguration.current.assetsSeq
-        val isDark = isSystemInDarkTheme()
-        val active = uiState.visualState == STATE_ACTIVE
-        val inactiveAlpha = override.inactiveAlpha ?: EdithInactiveTileAlpha
-
-        val bgTag = if (active) override.activeBg else override.inactiveBg
-        val iconTag = if (active) override.activeFg else override.inactiveFg
-        val resolved =
-            remember(context, isDark, assetsSeq, bgTag, iconTag) {
-                QuickActionsTileSwatches.resolve(context, bgTag) to
-                    QuickActionsTileSwatches.resolve(context, iconTag)
-            }
-        // Anything the tuner didn't set keeps its stock color.
-        val background =
-            resolved.first?.let { Color(it).copy(alpha = if (active) 1f else inactiveAlpha) }
-                ?: stock.background
-        val fg = resolved.second?.let { Color(it) }
-        return TileColors(
-            background = background,
-            iconBackground = background,
-            label = fg ?: stock.label,
-            secondaryLabel = fg ?: stock.secondaryLabel,
-            icon = fg ?: stock.icon,
-        )
-    }
+internal object TileDefaults {
 
     /** An active tile uses the active color as background */
     @Composable

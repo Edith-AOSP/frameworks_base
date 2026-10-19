@@ -35,6 +35,7 @@ import android.view.ViewTreeObserver
 import android.view.ViewTreeObserver.OnGlobalLayoutListener
 import android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR
 import androidx.annotation.VisibleForTesting
+import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced as launch
@@ -119,6 +120,28 @@ constructor(
     val logger = Logger(clockBuffers.infraMessageBuffer, TAG)
     var isPreview: Boolean = false
     private val resources = context.resources
+
+    /**
+     * Optional tint applied to the *small* clock while set (used by the Edith expanded media player
+     * to tint the clock with the album-art color). `null` restores the clock's normal color.
+     */
+    var smallClockTintColor: androidx.compose.ui.graphics.Color? = null
+        set(value) {
+            if (field == value) return
+            // Capture the small clock's own seed color the first time a tint is applied, so it can
+            // be restored when the tint is cleared (the tint is written into seedColor, so without
+            // this the tint would persist after collapsing).
+            if (value != null && field == null) {
+                smallClockOriginalSeedColor = clock?.smallClock?.theme?.seedColor
+                smallClockSeedCaptured = true
+            }
+            field = value
+            updateColors()
+        }
+
+    /** The small clock face's seed color before the tint was applied, restored when cleared. */
+    private var smallClockOriginalSeedColor: Int? = null
+    private var smallClockSeedCaptured: Boolean = false
 
     var clock: ClockController? = null
         get() = field
@@ -262,12 +285,30 @@ constructor(
         return isLightTheme.data == 0
     }
 
+    /**
+     * The seed color the small clock should use: the tint while set, or (once, when clearing) the
+     * seed that was captured before the tint was applied.
+     */
+    private fun smallClockSeedColor(currentSeed: Int?): Int? {
+        val tint = smallClockTintColor
+        return if (tint != null) {
+            tint.toArgb()
+        } else if (smallClockSeedCaptured) {
+            smallClockSeedCaptured = false
+            smallClockOriginalSeedColor
+        } else {
+            currentSeed
+        }
+    }
+
     private fun updateColors() {
         val isDarkTheme = isDarkTheme()
         if (regionSamplingEnabled) {
             clock?.smallClock?.run {
                 val isDark = smallRegionSampler?.currentRegionDarkness()?.isDark ?: isDarkTheme
-                updateTheme { it.copy(isDarkTheme = isDark) }
+                updateTheme {
+                    it.copy(isDarkTheme = isDark, seedColor = smallClockSeedColor(it.seedColor))
+                }
             }
             clock?.largeClock?.run {
                 val isDark = largeRegionSampler?.currentRegionDarkness()?.isDark ?: isDarkTheme
@@ -278,7 +319,9 @@ constructor(
 
         clock?.run {
             logger.i({ "updateColors(isThemeDark = $bool1)" }) { bool1 = isDarkTheme }
-            smallClock.updateTheme { it.copy(isDarkTheme = isDarkTheme) }
+            smallClock.updateTheme {
+                it.copy(isDarkTheme = isDarkTheme, seedColor = smallClockSeedColor(it.seedColor))
+            }
             largeClock.updateTheme { it.copy(isDarkTheme = isDarkTheme) }
         }
     }

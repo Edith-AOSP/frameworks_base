@@ -27,9 +27,11 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -38,6 +40,7 @@ import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -217,6 +220,19 @@ fun Media(
     animateWithExpansion: Boolean = true,
     morphProgress: (() -> Float)? = null,
     holdDuringTransition: Boolean = false,
+    // When non-null and this is the lock screen, overrides the card body tap so it can expand the
+    // media player instead of launching the app.
+    onCardBodyClick: ((Expandable) -> Unit)? = null,
+    // When false, the card does not draw the album art as its own background (used by the expanded
+    // lock screen media player, which draws the art as a separate square card).
+    drawArtBackground: Boolean = true,
+    // Whether the Edith expanded lock screen media player is showing (art as a square card with the
+    // content below). Only used on the lock screen.
+    expanded: Boolean = false,
+    // Called when the expanded player should collapse (tap on the art, or drag down).
+    onCollapse: () -> Unit = {},
+    // Notifies the expansion drag progress in [0,1] while the user drags the expanded art.
+    onExpansionDragProgress: (Float) -> Unit = {},
 ) {
     val context = LocalContext.current
     val viewModel: MediaViewModel =
@@ -237,6 +253,72 @@ fun Media(
 
     viewModel.mediaUiEventLogger.logCarouselLocation(location)
 
+    // Collapse when the shown session changes, so an expansion never carries over to a different
+    // track (the expansion state lives in a process-wide singleton).
+    if (expanded) {
+        val key = viewModel.cards.getOrNull(viewModel.currentIndex)?.key
+        LaunchedEffect(key) { if (key == null) onCollapse() }
+    }
+
+    val currentCard =
+        viewModel.cards.getOrNull(
+            viewModel.currentIndex.coerceIn(0, (viewModel.cards.size - 1).coerceAtLeast(0))
+        )
+
+    // Single animated expansion progress (0 = collapsed, 1 = expanded), shared by the morphing art
+    // and the ambient backdrop, so everything stays in sync and the art never disappears (which
+    // used to flicker the wallpaper on tap).
+    val expansionProgress = remember { Animatable(if (expanded) 1f else 0f) }
+    LaunchedEffect(expanded) {
+        expansionProgress.animateTo(
+            targetValue = if (expanded) 1f else 0f,
+            animationSpec = spring(stiffness = Media.PROGRESS_SPRING_STIFFNESS, dampingRatio = Media.PROGRESS_SPRING_DAMPING),
+        )
+    }
+
+    // The expandable-player presentation is *lock screen only*. Every other host (QS, communal,
+    // status bar popup) must keep the stock card, including its own art background.
+    if (location == Media.Location.LOCKSCREEN && currentCard != null) {
+        // A single morphing layout: the album art starts as the card's backing (behind the content,
+        // progress 0) and morphs into the centred square (above the content, progress 1), with the
+        // content sliding down to make room. Driving one layout (rather than cross-fading two) is
+        // what makes the transition continuous in *both* directions.
+        ExpandedMediaArt(
+            card = currentCard,
+            progress = expansionProgress,
+            onCollapse = onCollapse,
+            onProgressChanged = onExpansionDragProgress,
+            modifier = modifier,
+            // The collapsed card keeps the height of the active presentation style (the compact
+            // two-row card is shorter than the three-row one).
+            collapsedHeight =
+                if (presentationStyle == MediaPresentationStyle.Compressed) {
+                    Media.EDITH_COMPRESSED_HEIGHT
+                } else {
+                    Media.EDITH_DEFAULT_HEIGHT
+                },
+        ) {
+            CardCarousel(
+                viewModel = viewModel,
+                presentationStyle = presentationStyle,
+                behavior = behavior,
+                onDismissed = onDismissed,
+                mediaSquishiness = mediaSquishiness,
+                expansion = expansion,
+                animateWithExpansion = animateWithExpansion,
+                morphProgress = morphProgress,
+                // The ExpandedMediaArt layer draws the art in this path.
+                drawArtBackground = false,
+                onCardBodyClick = if (expanded) {
+                    { onCollapse() }
+                } else {
+                    onCardBodyClick
+                },
+            )
+        }
+        return
+    }
+
     CardCarousel(
         viewModel = viewModel,
         presentationStyle = presentationStyle,
@@ -247,6 +329,8 @@ fun Media(
         expansion = expansion,
         animateWithExpansion = animateWithExpansion,
         morphProgress = morphProgress,
+        drawArtBackground = drawArtBackground,
+        onCardBodyClick = onCardBodyClick,
     )
 }
 
@@ -269,6 +353,8 @@ private fun CardCarousel(
     expansion: () -> Float,
     animateWithExpansion: Boolean,
     morphProgress: (() -> Float)?,
+    drawArtBackground: Boolean = true,
+    onCardBodyClick: ((Expandable) -> Unit)? = null,
 ) {
     AnimatedVisibility(
         visible = viewModel.isCarouselVisible,
@@ -285,6 +371,8 @@ private fun CardCarousel(
             expansion = expansion,
             animateWithExpansion = animateWithExpansion,
             morphProgress = morphProgress,
+            drawArtBackground = drawArtBackground,
+            onCardBodyClick = onCardBodyClick,
         )
     }
 }
@@ -300,6 +388,8 @@ private fun CardCarouselContent(
     expansion: () -> Float,
     animateWithExpansion: Boolean,
     morphProgress: (() -> Float)?,
+    drawArtBackground: Boolean = true,
+    onCardBodyClick: ((Expandable) -> Unit)? = null,
 ) {
     val pagerState = rememberPagerState {
         if (behavior.isCarouselScrollingEnabled) {
@@ -394,6 +484,8 @@ private fun CardCarouselContent(
                             expansion = expansion,
                             animateWithExpansion = animateWithExpansion,
                             morphProgress = morphProgress,
+                            drawArtBackground = drawArtBackground,
+                            onCardBodyClick = onCardBodyClick,
                             modifier =
                                 Modifier.clip(roundedCornerShape)
                                     .fillMaxWidth()
@@ -483,6 +575,12 @@ private fun Card(
     expansion: () -> Float,
     animateWithExpansion: Boolean,
     morphProgress: (() -> Float)? = null,
+    // When false, the album art is not drawn as the card's own background (the Edith expanded
+    // lock screen media player draws the art as a separate square card above the content instead).
+    drawArtBackground: Boolean = true,
+    // When non-null, overrides the card body tap (which otherwise launches the playing app). Used
+    // by the Edith lock screen to expand the media player instead.
+    onCardBodyClick: ((Expandable) -> Unit)? = null,
 ) {
     val viewModel = mediaViewModel.cards[cardIndex]
     val stlState =
@@ -519,7 +617,7 @@ private fun Card(
     }
 
     Box(modifier) {
-        if (carouselStyle != MediaPresentationStyle.Compact) {
+        if (carouselStyle != MediaPresentationStyle.Compact && drawArtBackground) {
             CardBackground(
                 image = viewModel.background,
                 colorScheme = colorScheme,
@@ -546,6 +644,7 @@ private fun Card(
                             colorScheme = colorScheme,
                             threeRows = true,
                             fillHeight = false,
+                            onCardBodyClick = onCardBodyClick,
                         )
                     }
 
@@ -557,6 +656,7 @@ private fun Card(
                             colorScheme = colorScheme,
                             threeRows = true,
                             fillHeight = true,
+                            onCardBodyClick = onCardBodyClick,
                         )
                     }
 
@@ -568,6 +668,7 @@ private fun Card(
                             colorScheme = colorScheme,
                             threeRows = false,
                             fillHeight = false,
+                            onCardBodyClick = onCardBodyClick,
                         )
                     }
 
@@ -668,6 +769,7 @@ private fun ContentScope.CardForeground(
     threeRows: Boolean,
     fillHeight: Boolean,
     modifier: Modifier = Modifier,
+    onCardBodyClick: ((Expandable) -> Unit)? = null,
 ) {
     val viewModel = mediaViewModel.cards[cardIndex]
     // Can't use a Crossfade composable because of the custom layout logic below. Animate the alpha
@@ -688,6 +790,7 @@ private fun ContentScope.CardForeground(
                 threeRows = threeRows,
                 fillHeight = fillHeight,
                 colorScheme = colorScheme,
+                onCardBodyClick = onCardBodyClick,
                 modifier =
                     Modifier.layoutId(Media.LayoutId.CardForeground).graphicsLayer {
                         compositingStrategy = CompositingStrategy.ModulateAlpha
@@ -737,6 +840,7 @@ private fun ContentScope.CardForegroundContent(
     fillHeight: Boolean,
     colorScheme: AnimatedColorScheme,
     modifier: Modifier = Modifier,
+    onCardBodyClick: ((Expandable) -> Unit)? = null,
 ) {
     val viewModel = mediaViewModel.cards[cardIndex]
     Column(
@@ -747,7 +851,7 @@ private fun ContentScope.CardForegroundContent(
                 // media `Element` (QSFragmentCompose.MediaObject) owns any expansion-driven height,
                 // and pinning a hard 176dp here fought that animation during the QS transition.
                 .combinedClickable(
-                    onClick = { viewModel.onClick(expandable) },
+                    onClick = { (onCardBodyClick ?: viewModel.onClick).invoke(expandable) },
                     onLongClick = viewModel.onLongClick,
                 )
                 .semantics { contentDescription = viewModel.contentDescription }
@@ -846,6 +950,10 @@ private fun ContentScope.CardForegroundContent(
                         appName = viewModel.appName,
                         deviceName = deviceNameFor(viewModel.outputSwitcherChip),
                         modifier = Modifier,
+                        // The card body tap expands the lock screen player, so the app is opened
+                        // from the header app icon instead (unchanged elsewhere — this is the same
+                        // click intent the card body used to run).
+                        onAppIconClick = { viewModel.onClick(expandable) },
                     )
                 }
                 Spacer(Modifier.width(4.dp))
@@ -1782,6 +1890,7 @@ private fun ContentScope.EdithContextHeader(
     appName: String,
     deviceName: String,
     modifier: Modifier = Modifier,
+    onAppIconClick: (() -> Unit)? = null,
 ) {
     val headerDescription =
         stringResource(R.string.edith_media_context_header, appName, deviceName)
@@ -1795,7 +1904,12 @@ private fun ContentScope.EdithContextHeader(
             tint = iconTint,
             // Match the compressed (two-row) header icon: same size + circular clip, so the app
             // icon doesn't jump when the card cross-fades between the two scenes.
-            modifier = Modifier.size(24.dp).clip(CircleShape),
+            modifier =
+                Modifier.size(24.dp)
+                    .clip(CircleShape)
+                    .thenIf(onAppIconClick != null) {
+                        Modifier.clickable(onClick = onAppIconClick!!)
+                    },
         )
         // Gap after the app icon.
         Spacer(Modifier.width(6.dp))
@@ -2556,6 +2670,13 @@ object Media {
      * `1.05` shaves ~2.5% off each edge.
      */
     const val ART_OVER_CROP_SCALE = 1.05f
+
+    /** Duration of the collapsed <-> expanded lock screen media cross-fade. */
+    const val EXPAND_FADE_MILLIS = 220
+
+    /** Spring for the lock screen media expansion morph (shared by the art and the backdrop). */
+    const val PROGRESS_SPRING_STIFFNESS = 400f
+    const val PROGRESS_SPRING_DAMPING = 0.8f
 
     val DEFAULT_HEIGHT = 176.dp
     val COMPRESSED_HEIGHT = 128.dp

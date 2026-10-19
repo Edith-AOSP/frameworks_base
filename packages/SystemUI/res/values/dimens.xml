@@ -2307,4 +2307,12 @@
     <dimen name="usb_device_dialog_button_background_radius_full">360dp</dimen>
     <!-- Usb Device Dialog values end -->
 
+    <!-- Edith expanded lock screen media player (square album art card). -->
+    <dimen name="edith_media_art_side_margin">16dp</dimen>
+    <dimen name="edith_media_art_corner_radius">24dp</dimen>
+    <!-- Height of the collapsed album-art banner (morphs to a square when expanded). -->
+    <dimen name="edith_media_art_banner_height">204dp</dimen>
+    <!-- Gap between the expanded square art and the media controls below it. -->
+    <dimen name="edith_media_art_controls_gap">10dp</dimen>
+
 </resources>

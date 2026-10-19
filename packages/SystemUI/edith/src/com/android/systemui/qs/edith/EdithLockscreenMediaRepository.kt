@@ -27,10 +27,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 
 /**
- * Repository for the Edith "compact media player on the lock screen" toggle.
+ * Repository for the Edith lock screen media player toggles.
  *
- * Stored in [Settings.Secure] under [SETTING_NAME]; `true` = compact (two-row) media player,
- * `false` (default) = three-row.
+ * - [SETTING_NAME] (`edith_lockscreen_media_compact`): `true` = compact (two-row) media player,
+ *   `false` (default) = three-row.
+ * - [EXPANDABLE_SETTING_NAME] (`edith_lockscreen_media_expandable`): `true` (default) = tapping
+ *   the lock screen media card expands it into the large square-art view; `false` = the card body
+ *   tap launches the playing app (stock behaviour).
  */
 @SysUISingleton
 class EdithLockscreenMediaRepository
@@ -46,11 +49,24 @@ constructor(
             .distinctUntilChanged()
             .flowOn(backgroundDispatcher)
 
+    /** Whether tapping the lock screen media card expands it. Enabled by default. */
+    val isExpandable: Flow<Boolean> =
+        secureSettingsRepository
+            .boolSetting(EXPANDABLE_SETTING_NAME, defaultValue = true)
+            .distinctUntilChanged()
+            .flowOn(backgroundDispatcher)
+
     companion object {
         /**
          * [Settings.Secure] key for the compact lock screen media player. Referenced as a string
          * (rather than a framework constant) so this can ship as a SystemUI-only change.
          */
         const val SETTING_NAME = "edith_lockscreen_media_compact"
+
+        /**
+         * [Settings.Secure] key for the expandable lock screen media player. Referenced as a
+         * string (rather than a framework constant) so this can ship as a SystemUI-only change.
+         */
+        const val EXPANDABLE_SETTING_NAME = "edith_lockscreen_media_expandable"
     }
 }

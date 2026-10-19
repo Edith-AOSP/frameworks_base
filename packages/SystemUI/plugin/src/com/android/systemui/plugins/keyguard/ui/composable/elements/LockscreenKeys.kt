@@ -118,6 +118,13 @@ object LockscreenElementKeys {
     /** The UMO's lockscreen element */
     val MediaCarousel = ElementKey("LockscreenMediaCarousel")
 
+    /**
+     * The full-screen blurred album-art backdrop drawn behind the lock screen while the Edith media
+     * player is expanded. Elevated into the notifications shade so it survives the
+     * lockscreen -> shade transition (like [MediaCarousel]).
+     */
+    val MediaArtBackground = ElementKey("LockscreenMediaArtBackground")
+
     object Notifications {
         /** The notification stack display on lockscreen */
         val Stack = ElementKey("LockscreenNotificationStack")

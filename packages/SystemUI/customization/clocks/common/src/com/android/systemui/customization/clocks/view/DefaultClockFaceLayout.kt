@@ -79,6 +79,7 @@ open class DefaultClockFaceLayout(val view: View) : ClockFaceLayout {
                 // the Unicode Bidirectional Algorithm would fall back to the locale default
                 // direction, yet the time should always have LTR directionality.
                 view.textDirection = View.TEXT_DIRECTION_LTR
+
             }
 
             ClockView(

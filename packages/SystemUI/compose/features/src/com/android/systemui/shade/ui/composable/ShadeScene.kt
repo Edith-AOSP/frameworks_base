@@ -41,6 +41,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.ElementKey
 import com.android.compose.animation.scene.LowestZIndexContentPicker
@@ -96,10 +98,12 @@ import com.android.systemui.notifications.intelligence.rules.shared.NmContextual
 import com.android.systemui.notifications.intelligence.rules.ui.viewmodel.NotificationRulesParentViewModel
 import com.android.systemui.notifications.ui.composable.NestedScrollingNotificationPanel
 import com.android.systemui.notifications.ui.composable.ScrollingNotificationPanel
+import com.android.systemui.progressiveblur.bottomProgressiveBlur
 import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.footer.ui.compose.FooterActionsWithAnimatedVisibility
 import com.android.systemui.qs.panels.ui.compose.QuickActionsGrid
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
+import com.android.systemui.qs.panels.ui.compose.infinitegrid.LocalTileContentAlpha
 import com.android.systemui.qs.shared.ui.QuickSettings
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.SplitShadeQuickSettings
 import com.android.systemui.qs.ui.composable.EdithEditMode
@@ -117,6 +121,7 @@ import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
 import com.android.systemui.shade.ui.viewmodel.ShadeSceneContentViewModel
 import com.android.systemui.shade.ui.viewmodel.ShadeUserActionsViewModel
 import com.android.systemui.statusbar.notification.stack.ui.view.NotificationScrollView
+import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationTransitionThresholds.EXPANSION_FOR_MAX_SCRIM_ALPHA
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationsPlaceholderViewModel
 import dagger.Lazy
 import javax.inject.Inject
@@ -147,6 +152,8 @@ constructor(
     private val notificationsPlaceholderViewModelFactory: NotificationsPlaceholderViewModel.Factory,
     private val notificationRulesParentViewModelFactory: NotificationRulesParentViewModel.Factory,
     private val jankMonitor: InteractionJankMonitor,
+    private val mediaArtBackgroundViewModelFactory:
+        com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel.Factory,
 ) : ExclusiveActivatable(), Scene {
 
     override val key = Scenes.Shade
@@ -190,6 +197,7 @@ constructor(
             }
         val animatedBlurRadiusPx: Float by
             animateFloatAsState(targetValue = targetBlur, label = "Shade-blurRadius")
+
         ShadeScene(
             notificationStackScrollView.get(),
             viewModel = viewModel,
@@ -199,6 +207,7 @@ constructor(
             jankMonitor = jankMonitor,
             modifier = modifier.blur(with(LocalDensity.current) { animatedBlurRadiusPx.toDp() }),
             shadeSession = shadeSession,
+            mediaArtBackgroundViewModelFactory = mediaArtBackgroundViewModelFactory,
         )
     }
 
@@ -230,6 +239,8 @@ private fun ContentScope.ShadeScene(
     jankMonitor: InteractionJankMonitor,
     modifier: Modifier = Modifier,
     shadeSession: SaveableSession,
+    mediaArtBackgroundViewModelFactory:
+        com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel.Factory,
 ) {
     val onEmptySpaceClick by
         remember(viewModel) {
@@ -269,6 +280,7 @@ private fun ContentScope.ShadeScene(
             shadeSession = shadeSession,
             jankMonitor = jankMonitor,
             onEmptySpaceClick = onEmptySpaceClick,
+            mediaArtBackgroundViewModelFactory = mediaArtBackgroundViewModelFactory,
         )
     }
 }
@@ -285,6 +297,8 @@ private fun ContentScope.SingleShade(
     modifier: Modifier = Modifier,
     shadeSession: SaveableSession,
     onEmptySpaceClick: (() -> Unit)?,
+    mediaArtBackgroundViewModelFactory:
+        com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel.Factory,
 ) {
 
     val cutoutLocation = LocalDisplayCutout.current().location
@@ -356,7 +370,19 @@ private fun ContentScope.SingleShade(
             OffsetOverscrollEffect.computeOffset(density = this, totalOverscroll)
         }
 
-        ShadePanelScrim(viewModel.isTransparencyEnabled)
+        // Fade the notification scrim content in with the shade expansion, matching the
+        // SplitShade pane (tiles/header stay solid). This replaces the alpha-fade that lived on
+        // the scrim's background fill, which is no longer drawn.
+        val expansionFraction by
+            notificationsPlaceholderViewModel.expandFraction.collectAsStateWithLifecycle(0f)
+
+        ShadePanelScrim(
+            isTransparencyEnabled = viewModel.isTransparencyEnabled,
+            mediaArtBackgroundViewModel =
+                rememberViewModel("ShadeScene-mediaArtBackground") {
+                    mediaArtBackgroundViewModelFactory.create()
+                },
+        )
         SingleShadeNestedScrollLayout(
             modifier =
                 Modifier.thenIf(onEmptySpaceClick != null) {
@@ -393,22 +419,26 @@ private fun ContentScope.SingleShade(
                             .padding(horizontal = qsHorizontalMargin),
                     quickActions =
                         @Composable {
-                            if (viewModel.qsContainerViewModel.edithStyleEnabled) {
+                            if (viewModel.qsContainerViewModel.edithTileStyle.enabled) {
                                 var listening by remember { mutableStateOf(false) }
                                 LifecycleStartEffect(Unit) {
                                     listening = true
 
                                     onStopOrDispose { listening = false }
                                 }
-                                QuickActionsGrid(
-                                    viewModel = viewModel.qsContainerViewModel.quickActionsGridViewModel,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    listening = { listening },
-                                    edithTileStyle = viewModel.qsContainerViewModel.edithStyleEnabled,
-                                    edithColorEnabled = viewModel.qsContainerViewModel.edithColorEnabled,
-                                    edithQuickActionsOverride =
-                                        viewModel.qsContainerViewModel.edithQuickActionsOverride,
-                                )
+                                // Fade the Quick Actions tile contents with the shade expansion.
+                                CompositionLocalProvider(
+                                    LocalTileContentAlpha provides
+                                        (expansionFraction / EXPANSION_FOR_MAX_SCRIM_ALPHA)
+                                            .coerceAtMost(1f)
+                                ) {
+                                    QuickActionsGrid(
+                                        viewModel = viewModel.qsContainerViewModel.quickActionsGridViewModel,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        listening = { listening },
+                                        edithStyle = viewModel.qsContainerViewModel.edithTileStyle,
+                                    )
+                                }
                             }
                         },
                     tiles =
@@ -423,24 +453,27 @@ private fun ContentScope.SingleShade(
                                 onStopOrDispose { listening = false }
                             }
                             // In the Edith style, QQS shows only the Quick Actions grid (plus media).
-                            if (!viewModel.qsContainerViewModel.edithStyleEnabled) {
+                            if (!viewModel.qsContainerViewModel.edithTileStyle.enabled) {
                                 Box {
                                     val qqsViewModel =
                                         rememberViewModel(traceName = "shade_scene_qqs") {
                                             viewModel.quickQuickSettingsViewModel.create()
                                         }
                                     if (viewModel.isQsEnabled) {
-                                        QuickQuickSettings(
-                                            qqsViewModel,
-                                            listening = { listening },
-                                            modifier = Modifier.sysuiResTag("quick_qs_panel"),
-                                            edithTileStyle =
-                                                viewModel.qsContainerViewModel.edithStyleEnabled,
-                                            edithColorEnabled =
-                                                viewModel.qsContainerViewModel.edithColorEnabled,
-                                            edithTileColorOverride =
-                                                viewModel.qsContainerViewModel.edithTileColorOverride,
-                                        )
+                                        // Fade the QQS tile contents with the shade expansion.
+                                        CompositionLocalProvider(
+                                            LocalTileContentAlpha provides
+                                                (expansionFraction / EXPANSION_FOR_MAX_SCRIM_ALPHA)
+                                                    .coerceAtMost(1f)
+                                        ) {
+                                            QuickQuickSettings(
+                                                qqsViewModel,
+                                                listening = { listening },
+                                                modifier = Modifier.sysuiResTag("quick_qs_panel"),
+                                                edithStyle =
+                                                    viewModel.qsContainerViewModel.edithTileStyle,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -523,15 +556,23 @@ private fun ContentScope.SingleShade(
                 )
             },
             scrollableScrim = { onContentHeightChanged, isScrimAtRest ->
+                // The notification panel is always composed: it carries the NotificationScrim
+                // element that the shade <-> QS transitions animate, and the notification stack is
+                // not hidden while the media player is expanded.
                 NestedScrollingNotificationPanel(
                     tag = "$tag.Single",
                     shadeSession = shadeSession,
                     stackScrollView = notificationStackScrollView,
                     viewModel = notificationsPlaceholderViewModel,
                     notificationRulesParentViewModel = notificationRulesParentViewModel,
-                    shouldPunchHoleBehindScrim = true,
+                    // No hole punch: with the scrim drawing no fill, the scene
+                    // ShadePanelScrim is the single background for the whole shade.
+                    shouldPunchHoleBehindScrim = false,
                     shouldContentFillMaxSize = true,
                     shouldScrimBackgroundFillMaxHeight = true,
+                    // Keep the scrim background transparent so the single-tone scene
+                    // ShadePanelScrim shows through (no dual tone in QQS).
+                    shouldDrawScrimBackground = false,
                     isTransparencyEnabled = viewModel.isTransparencyEnabled,
                     stackTopPadding = notificationStackPadding,
                     stackBottomPadding = navBarHeight,
@@ -539,7 +580,13 @@ private fun ContentScope.SingleShade(
                     scrollingContentOverscrollEffect = scrollingContentOverscrollEffect,
                     shortContentOverscrollEffect = shortContentOverscrollEffect,
                     onEmptySpaceClick = onEmptySpaceClick,
-                    modifier = Modifier.padding(horizontal = shadeHorizontalPadding),
+                    modifier =
+                        Modifier.graphicsLayer {
+                                alpha =
+                                    (expansionFraction / EXPANSION_FOR_MAX_SCRIM_ALPHA)
+                                        .coerceAtMost(1f)
+                            }
+                            .padding(horizontal = shadeHorizontalPadding),
                     onStackHeightChanged = onContentHeightChanged,
                     allowSwipeToExpandChildren = isScrimAtRest,
                 )
@@ -679,7 +726,6 @@ private fun ContentScope.SplitShade(
                                 translationX = viewModel.unfoldTranslationXForStartSide
                             }
                             .fillMaxSize()
-                            .padding(bottom = navBarBottomHeight)
                 ) {
                     if (viewModel.isQsEnabled) {
                         val sceneState =
@@ -730,29 +776,50 @@ private fun ContentScope.SplitShade(
                                 }
 
                                 Element(QS.rootElementKey, Modifier) {
-                                    Column {
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        // Scroll content fills the pane (behind the footer) and is
+                                        // frosted at its bottom edge so it fades into the footer
+                                        // (settings/edit buttons) without clipping mid-content.
                                         Box(
-                                            Modifier.weight(1f)
-                                                .sysuiResTag("expanded_qs_scroll_view")
-                                                .verticalScroll(rememberScrollState())
-                                                .wrapContentHeight(
-                                                    align = Alignment.Top,
-                                                    unbounded = true,
+                                            Modifier.fillMaxSize()
+                                                .bottomProgressiveBlur(
+                                                    radius = ProgressiveBlurFooterRadius,
+                                                    bandHeight = ProgressiveBlurFooterBandHeight,
+                                                    enabled = viewModel.isTransparencyEnabled,
                                                 )
                                         ) {
-                                            QuickSettingsContent(
-                                                qsContainerViewModel,
-                                                mediaInRow = false,
-                                                mediaSquishiness = { tileSquishiness },
-                                            )
+                                            Column(
+                                                modifier =
+                                                    Modifier
+                                                        .sysuiResTag("expanded_qs_scroll_view")
+                                                        .verticalScroll(rememberScrollState())
+                                                        .wrapContentHeight(
+                                                            align = Alignment.Top,
+                                                            unbounded = true,
+                                                        )
+                                                        // Let the last item scroll clear of the
+                                                        // floating footer and the navbar.
+                                                        .padding(
+                                                            bottom =
+                                                                ProgressiveBlurFooterBandHeight +
+                                                                    navBarBottomHeight
+                                                        )
+                                            ) {
+                                                QuickSettingsContent(
+                                                    qsContainerViewModel,
+                                                    mediaInRow = false,
+                                                    mediaSquishiness = { tileSquishiness },
+                                                )
+                                            }
                                         }
                                         FooterActionsWithAnimatedVisibility(
                                             viewModel = footerActionsViewModel,
                                             isCustomizing = false,
                                             customizingAnimationDuration = 0,
                                             modifier =
-                                                Modifier.align(Alignment.CenterHorizontally)
-                                                    .sysuiResTag("qs_footer_actions"),
+                                                Modifier.align(Alignment.BottomCenter)
+                                                    .sysuiResTag("qs_footer_actions")
+                                                    .padding(bottom = navBarBottomHeight),
                                         )
                                     }
                                 }
@@ -776,6 +843,10 @@ private fun ContentScope.SplitShade(
                         }
                     }
                 }
+                // Fade the notification pane in with the shade expansion (same ramp as the
+                // SingleShade QQS header), now that the pane draws no fill of its own.
+                val expansionFraction by
+                    notificationsPlaceholderViewModel.expandFraction.collectAsStateWithLifecycle(0f)
                 ScrollingNotificationPanel(
                     tag = "$tag.Split",
                     shadeSession = shadeSession,
@@ -787,12 +858,19 @@ private fun ContentScope.SplitShade(
                     stackBottomPadding = { notificationStackPadding },
                     shouldFillMaxHeight = true,
                     shouldPunchHoleBehindScrim = false,
+                    // Single tone: the scene ShadePanelScrim is the only background here too.
+                    shouldDrawScrimBackground = false,
                     useVerticalOverscrollEffect = false,
                     isTransparencyEnabled = viewModel.isTransparencyEnabled,
                     onEmptySpaceClick = onEmptySpaceClick,
                     modifier =
                         Modifier.weight(weight = 1f)
                             .fillMaxHeight()
+                            .graphicsLayer {
+                                alpha =
+                                    (expansionFraction / EXPANSION_FOR_MAX_SCRIM_ALPHA)
+                                        .coerceAtMost(1f)
+                            }
                             .padding(
                                 end =
                                     dimensionResource(R.dimen.notification_panel_margin_horizontal),
@@ -803,3 +881,8 @@ private fun ContentScope.SplitShade(
         }
     }
 }
+
+// Progressive blur applied to the bottom edge of the scrollable QS content so it frosts into the
+// footer (settings/edit buttons) instead of clipping hard against it.
+private val ProgressiveBlurFooterRadius = 12.dp
+private val ProgressiveBlurFooterBandHeight = 72.dp

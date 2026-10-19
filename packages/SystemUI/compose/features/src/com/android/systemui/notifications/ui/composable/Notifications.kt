@@ -39,7 +39,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.overscroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.withoutVisualEffect
 import androidx.compose.material.icons.Icons
@@ -63,7 +62,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -84,9 +82,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastMaxOf
 import androidx.compose.ui.util.fastMinOf
-import androidx.compose.ui.util.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.compose.animation.scene.ContentKey
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.ElementKey
 import com.android.compose.animation.scene.HeadsUpContentPicker
@@ -101,7 +97,6 @@ import com.android.compose.nestedscroll.PriorityNestedScrollConnection
 import com.android.compose.nestedscroll.ScrollController
 import com.android.internal.jank.Cuj.CUJ_NOTIFICATION_SHADE_SCROLL_FLING
 import com.android.internal.jank.InteractionJankMonitor
-import com.android.systemui.common.ui.compose.windowinsets.LocalScreenCornerRadius
 import com.android.systemui.notifications.intelligence.rules.shared.NmContextualDisplayLaunch
 import com.android.systemui.notifications.intelligence.rules.ui.viewmodel.NotificationRulesParentViewModel
 import com.android.systemui.notifications.ui.YSpace
@@ -113,11 +108,8 @@ import com.android.systemui.shade.ui.ShadeColors
 import com.android.systemui.statusbar.notification.shared.NsslTouchDispatchFix
 import com.android.systemui.statusbar.notification.stack.shared.model.AccessibilityScrollEvent
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimBounds
-import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimRounding
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrollState
 import com.android.systemui.statusbar.notification.stack.ui.view.NotificationScrollView
-import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationTransitionThresholds.EXPANSION_FOR_MAX_CORNER_RADIUS
-import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationTransitionThresholds.EXPANSION_FOR_MAX_SCRIM_ALPHA
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationsPlaceholderViewModel
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -223,6 +215,9 @@ fun ContentScope.ScrollingNotificationPanel(
     shouldFillMaxHeight: Boolean = false,
     shouldIncludeHeadsUpSpace: Boolean = true,
     shouldDrawScrimBackground: Boolean = true,
+    // Whether the scrim applies its visual overscroll (bounce) effects. Independent from
+    // [shouldDrawScrimBackground] so a fill-less scrim can still bounce.
+    useScrimOverscrollVisuals: Boolean = true,
     useVerticalOverscrollEffect: Boolean = true,
     isActivated: Boolean = true,
     contentScrollState: ScrollState =
@@ -283,6 +278,7 @@ fun ContentScope.ScrollingNotificationPanel(
         shouldContentFillMaxSize = shouldFillMaxHeight,
         shouldScrimBackgroundFillMaxHeight = false,
         shouldDrawScrimBackground = shouldDrawScrimBackground,
+        useScrimOverscrollVisuals = useScrimOverscrollVisuals,
         shouldIncludeHeadsUpSpace = shouldIncludeHeadsUpSpace,
         useVerticalOverscrollEffect = useVerticalOverscrollEffect,
         isActivated = isActivated,
@@ -315,6 +311,9 @@ fun ContentScope.NestedScrollingNotificationPanel(
     shouldScrimBackgroundFillMaxHeight: Boolean,
     shouldIncludeHeadsUpSpace: Boolean = true,
     shouldDrawScrimBackground: Boolean = true,
+    // Whether the scrim applies its visual overscroll (bounce) effects. Independent from
+    // [shouldDrawScrimBackground] so a fill-less scrim can still bounce.
+    useScrimOverscrollVisuals: Boolean = true,
     useVerticalOverscrollEffect: Boolean = true,
     isActivated: Boolean = true,
     onEmptySpaceClick: (() -> Unit)? = null,
@@ -403,19 +402,23 @@ fun ContentScope.NestedScrollingNotificationPanel(
     }
 
     val density = LocalDensity.current
-    val screenCornerRadius = LocalScreenCornerRadius.current
-    val scrimCornerRadius = dimensionResource(R.dimen.notification_scrim_corner_radius)
     val classicShadeNotificationScrimBgColor =
-        Color(
-            ShadeColors.classicShadeNotificationScrimBg(
-                LocalContext.current,
-                blurSupported = isTransparencyEnabled,
-                // When the Notification Scrim punches a hole in the scene bg, we need to use the
-                // composite colors of the Scene Scrim, and the Notification Scrim to achieve the
-                // same color as  in the shade types where we are NOT punching a hole.
-                composited = shouldPunchHoleBehindScrim,
+        if (shouldDrawScrimBackground) {
+            Color(
+                ShadeColors.classicShadeNotificationScrimBg(
+                    LocalContext.current,
+                    blurSupported = isTransparencyEnabled,
+                    // When the Notification Scrim punches a hole in the scene bg, we need to use
+                    // the composite colors of the Scene Scrim, and the Notification Scrim to
+                    // achieve the same color as in the shade types where we are NOT punching a
+                    // hole.
+                    composited = shouldPunchHoleBehindScrim,
+                )
             )
-        )
+        } else {
+            // The scrim draws no fill; the scene ShadePanelScrim shows through.
+            Color.Unspecified
+        }
     val expansionFraction by viewModel.expandFraction.collectAsStateWithLifecycle(0f)
     val screenHeight = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
@@ -423,9 +426,6 @@ fun ContentScope.NestedScrollingNotificationPanel(
     val stackVerticalPaddingPx = {
         with(density) { (stackTopPadding + stackBottomPadding()).toPx() }.roundToInt()
     }
-
-    val scrimRounding =
-        viewModel.shadeScrimRounding.collectAsStateWithLifecycle(ShadeScrimRounding())
 
     val swipeToExpandNotificationScrollConnection =
         shadeSession.rememberSession(
@@ -477,9 +477,9 @@ fun ContentScope.NestedScrollingNotificationPanel(
         modifier =
             modifier
                 .element(Notifications.Elements.NotificationScrim)
-                // Only apply visual effects when the background is drawn.
-                .thenIf(shouldDrawScrimBackground) {
-                    // Apply overscroll visuals (visuals only, no event handling):
+                // Apply overscroll visuals (visuals only, no event handling), independent of
+                // whether the scrim draws its own background fill.
+                .thenIf(useScrimOverscrollVisuals) {
                     Modifier.thenIf(useVerticalOverscrollEffect) {
                             // SceneContainer transitions
                             Modifier.overscroll(verticalOverscrollEffect)
@@ -641,21 +641,6 @@ fun ContentScope.NestedScrollingNotificationPanel(
                             )
                         }
                         .onUnplaced { viewModel.onScrimBoundsChanged(null) }
-                        .graphicsLayer {
-                            shape =
-                                calculateCornerRadius(
-                                        scrimCornerRadius,
-                                        screenCornerRadius,
-                                        { expansionFraction },
-                                        shouldAnimateScrimCornerRadius(
-                                            layoutState,
-                                            shouldPunchHoleBehindScrim,
-                                            viewModel.notificationsShadeContentKey,
-                                        ),
-                                    )
-                                    .let { scrimRounding.value.toRoundedCornerShape(it) }
-                            clip = true
-                        }
                         // The DstOut blend mode is used to punch a transparent hole through
                         // the scrim's background, cutting out the QQS tiles. When used in
                         // conjunction with CompositingStrategy.Offscreen on the parent,
@@ -664,10 +649,6 @@ fun ContentScope.NestedScrollingNotificationPanel(
                             Modifier.drawBehind {
                                 drawRect(Color.Black, blendMode = BlendMode.DstOut)
                             }
-                        }
-                        .graphicsLayer {
-                            alpha =
-                                (expansionFraction / EXPANSION_FOR_MAX_SCRIM_ALPHA).coerceAtMost(1f)
                         }
                         // The background color that makes the surface behind Notifications.
                         .thenIf(shouldDrawScrimBackground) {
@@ -746,33 +727,6 @@ private inline fun performNestedScroll(
     return consumed + preConsumed + postConsumed
 }
 
-private fun shouldAnimateScrimCornerRadius(
-    state: SceneTransitionLayoutState,
-    shouldPunchHoleBehindScrim: Boolean,
-    notificationsShade: ContentKey,
-): Boolean {
-    return shouldPunchHoleBehindScrim ||
-        state.isTransitioning(from = notificationsShade, to = Scenes.Lockscreen)
-}
-
-private fun calculateCornerRadius(
-    scrimCornerRadius: Dp,
-    screenCornerRadius: Dp,
-    expansionFraction: () -> Float,
-    transitioning: Boolean,
-): Dp {
-    return if (transitioning) {
-        lerp(
-                start = screenCornerRadius.value,
-                stop = scrimCornerRadius.value,
-                fraction = (expansionFraction() / EXPANSION_FOR_MAX_CORNER_RADIUS).coerceIn(0f, 1f),
-            )
-            .dp
-    } else {
-        scrimCornerRadius
-    }
-}
-
 internal inline fun debugLog(viewModel: NotificationsPlaceholderViewModel, msg: () -> Any) {
     if (viewModel.isDebugLoggingEnabled) {
         Log.d(TAG, msg().toString())
@@ -788,17 +742,6 @@ internal fun Modifier.debugBackground(
     } else {
         this
     }
-
-private fun ShadeScrimRounding.toRoundedCornerShape(radius: Dp): RoundedCornerShape {
-    val topRadius = if (isTopRounded) radius else 0.dp
-    val bottomRadius = if (isBottomRounded) radius else 0.dp
-    return RoundedCornerShape(
-        topStart = topRadius,
-        topEnd = topRadius,
-        bottomStart = bottomRadius,
-        bottomEnd = bottomRadius,
-    )
-}
 
 private const val TAG = "FlexiNotifs"
 private val DEBUG_BOX_COLOR = Color(0f, 1f, 0f, 0.2f)

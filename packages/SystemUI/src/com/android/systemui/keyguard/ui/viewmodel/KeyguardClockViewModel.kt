@@ -35,6 +35,7 @@ import com.android.systemui.log.dagger.KeyguardLargeClockLog
 import com.android.systemui.log.dagger.KeyguardSmallClockLog
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockController
 import com.android.systemui.plugins.keyguard.ui.clocks.ClockPreviewConfig
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.res.R as SysuiR
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shade.ShadeDisplayAware
@@ -68,8 +69,16 @@ constructor(
     @Main private val resources: Resources,
     @KeyguardSmallClockLog private val smallClockLogBuffer: LogBuffer,
     @KeyguardLargeClockLog private val largeClockLogBuffer: LogBuffer,
+    private val mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
 ) {
     var burnInLayer: Layer? = null
+
+    /**
+     * Whether the Edith media player is expanded. While expanded, the small-clock region drops its
+     * smartspace (and date/weather) so the media player sits tight under the clock.
+     */
+    val isMediaExpanded: Boolean
+        get() = mediaExpansionInteractor.isExpanded
 
     val clockSize: StateFlow<ClockSize> = keyguardClockInteractor.clockSize
 

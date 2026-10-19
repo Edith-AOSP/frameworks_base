@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +34,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.overscroll
 import androidx.compose.foundation.rememberScrollState
@@ -78,12 +81,15 @@ import com.android.systemui.common.ui.compose.windowinsets.CutoutLocation
 import com.android.systemui.common.ui.compose.windowinsets.LocalDisplayCutout
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.keyguard.ui.composable.LockscreenMediaArtBackground
 import com.android.systemui.lifecycle.ExclusiveActivatable
 import com.android.systemui.lifecycle.rememberViewModel
+import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementKeys
 import com.android.systemui.notifications.intelligence.rules.shared.NmContextualDisplayLaunch
 import com.android.systemui.notifications.intelligence.rules.ui.viewmodel.NotificationRulesParentViewModel
 import com.android.systemui.notifications.ui.composable.HeadsUpNotificationPlaceholder
 import com.android.systemui.notifications.ui.composable.ScrollingNotificationPanel
+import com.android.systemui.progressiveblur.bottomProgressiveBlur
 import com.android.systemui.qs.composefragment.ui.GridAnchor
 import com.android.systemui.qs.edith.EditZone
 import com.android.systemui.qs.edith.EdithEditLanding
@@ -124,6 +130,8 @@ constructor(
     private val contentViewModelFactory: QuickSettingsSceneContentViewModel.Factory,
     private val notificationRulesParentViewModelFactory: NotificationRulesParentViewModel.Factory,
     private val jankMonitor: InteractionJankMonitor,
+    private val mediaArtBackgroundViewModelFactory:
+        com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel.Factory,
 ) : ExclusiveActivatable(), Scene {
     override val key = Scenes.QuickSettings
 
@@ -175,19 +183,31 @@ constructor(
 
         LaunchedEffectWithLifecycle(key1 = Unit) { viewModel.detectShadeModeChanges() }
 
-        QuickSettingsScene(
-            notificationStackScrollView = notificationStackScrollView.get(),
-            viewModel = viewModel,
-            headerViewModel = viewModel.qsContainerViewModel.shadeHeaderViewModel,
-            notificationsPlaceholderViewModel = notificationsPlaceholderViewModel,
-            notificationRulesParentViewModel = notificationRulesParentViewModel,
-            modifier =
-                modifier
-                    .graphicsLayer { alpha = contentAlpha }
-                    .thenIf(brightnessMirrorShowing) { Modifier.gesturesDisabled() },
-            shadeSession = shadeSession,
-            jankMonitor = jankMonitor,
-        )
+        // While the Edith media player is expanded, draw its blurred album-art backdrop behind the
+        // expanded QS content (same element key as LockscreenContent, so the transition carries it).
+        val mediaArtBackgroundViewModel =
+            rememberViewModel("QuickSettingsScene-mediaArtBackground") {
+                mediaArtBackgroundViewModelFactory.create()
+            }
+        Box {
+            LockscreenMediaArtBackground(
+                mediaArtBackgroundViewModel,
+                Modifier.element(LockscreenElementKeys.MediaArtBackground),
+            )
+            QuickSettingsScene(
+                notificationStackScrollView = notificationStackScrollView.get(),
+                viewModel = viewModel,
+                headerViewModel = viewModel.qsContainerViewModel.shadeHeaderViewModel,
+                notificationsPlaceholderViewModel = notificationsPlaceholderViewModel,
+                notificationRulesParentViewModel = notificationRulesParentViewModel,
+                modifier =
+                    modifier
+                        .graphicsLayer { alpha = contentAlpha }
+                        .thenIf(brightnessMirrorShowing) { Modifier.gesturesDisabled() },
+                shadeSession = shadeSession,
+                jankMonitor = jankMonitor,
+            )
+        }
     }
 
     companion object {
@@ -408,12 +428,29 @@ private fun ContentScope.QuickSettingsContent(
         // ############# Media ###############
         val mediaInRow = viewModel.qsContainerViewModel.showMediaInRow
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Box(
+            // Only inset the sides/top here so the frosted layer can extend to the true screen
+            // bottom (behind the navigation bar); the bottom inset is applied to the content and
+            // footer below so their clip edge doesn't land at the navbar boundary.
             modifier =
-                Modifier.fillMaxSize().overscroll(verticalOverscrollEffect).padding(navBarInsets),
+                Modifier.fillMaxSize()
+                    .overscroll(verticalOverscrollEffect)
+                    .windowInsetsPadding(
+                        WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+                    ),
         ) {
-            Box(modifier = Modifier.fillMaxSize().weight(1f)) {
+            // Scroll content fills the whole height (behind the footer) and is frosted at its bottom
+            // edge, which sits at the true screen bottom so the blur has room and does not clip
+            // mid-content. The footer floats on top of it.
+            Box(
+                modifier =
+                    Modifier.fillMaxSize()
+                        .bottomProgressiveBlur(
+                            radius = ProgressiveBlurFooterRadius,
+                            bandHeight = ProgressiveBlurFooterBandHeight,
+                            enabled = viewModel.isTransparencyEnabled,
+                        )
+            ) {
                 Column(
                     modifier =
                         Modifier.disableSwipesWhenScrolling()
@@ -422,6 +459,10 @@ private fun ContentScope.QuickSettingsContent(
                             .fillMaxWidth()
                             .wrapContentHeight(unbounded = true)
                             .align(Alignment.TopCenter)
+                            // Let the last item scroll clear of the floating footer and the navbar.
+                            .padding(
+                                bottom = ProgressiveBlurFooterBandHeight + navBarInsets.calculateBottomPadding()
+                            )
                             .sysuiResTag("expanded_qs_scroll_view")
                 ) {
                     with(LocalWindowSizeClass.current) {
@@ -452,9 +493,12 @@ private fun ContentScope.QuickSettingsContent(
                 isCustomizing = false,
                 customizingAnimationDuration = 0,
                 modifier =
-                    Modifier.align(Alignment.CenterHorizontally)
+                    Modifier.align(Alignment.BottomCenter)
                         .sysuiResTag("qs_footer_actions")
-                        .padding(horizontal = shadeHorizontalPadding),
+                        .padding(
+                            horizontal = shadeHorizontalPadding,
+                            vertical = navBarInsets.calculateBottomPadding(),
+                        ),
             )
         }
     }
@@ -472,7 +516,7 @@ internal fun ContentScope.EdithEditMode(
 ) {
     val quickActionsEditor = containerViewModel.quickActionsEditViewModel
     val stopEditing = containerViewModel.editModeViewModel::stopEditing
-    if (containerViewModel.edithStyleEnabled) {
+    if (containerViewModel.edithTileStyle.enabled) {
         LaunchedEffect(Unit) { quickActionsEditor.startEditing() }
         val zone by quickActionsEditor.zone.collectAsStateWithLifecycle()
         when (zone) {
@@ -498,7 +542,7 @@ internal fun ContentScope.EdithEditMode(
                     onReset = { quickActionsEditor.showResetDialog() },
                     onStopEditing = stopEditing,
                     modifier = modifier,
-                    edithColorEnabled = containerViewModel.edithColorEnabled,
+                    edithColorEnabled = containerViewModel.edithTileStyle.colorsEnabled,
                 )
             }
         }
@@ -506,3 +550,8 @@ internal fun ContentScope.EdithEditMode(
         EditMode(viewModel = containerViewModel.editModeViewModel, modifier = modifier)
     }
 }
+
+// Progressive blur applied to the bottom edge of the scrollable QS content so it frosts into the
+// footer (settings/edit buttons) instead of clipping hard against it.
+private val ProgressiveBlurFooterRadius = 12.dp
+private val ProgressiveBlurFooterBandHeight = 72.dp

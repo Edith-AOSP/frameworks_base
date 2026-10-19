@@ -67,6 +67,12 @@ constructor(
      */
     val isCompactMedia: Boolean by edithLockscreenMediaInteractor.isCompact.hydratedStateOf()
 
+    /**
+     * Whether tapping the lock screen media card expands it into the large square-art view
+     * (the Edith "expandable media player" lock screen toggle).
+     */
+    val isExpandable: Boolean by edithLockscreenMediaInteractor.isExpandable.hydratedStateOf()
+
     fun onSwipeToDismiss() = mediaCarouselInteractor.onSwipeToDismiss()
 
     val mediaUiBehavior =

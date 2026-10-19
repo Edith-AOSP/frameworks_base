@@ -46,6 +46,7 @@ import com.android.compose.lifecycle.DisposableEffectWithLifecycle
 import com.android.compose.lifecycle.LaunchedEffectWithLifecycle
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.keyguard.ui.composable.LockscreenMediaArtBackground
 import com.android.systemui.keyguard.ui.composable.elements.LockscreenElements
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.media.remedia.ui.compose.Media
@@ -79,6 +80,8 @@ constructor(
     private val shadeSession: SaveableSession,
     private val stackScrollView: Lazy<NotificationScrollView>,
     private val jankMonitor: InteractionJankMonitor,
+    private val mediaArtBackgroundViewModelFactory:
+        com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel.Factory,
 ) : Overlay {
     override val key = Overlays.NotificationsShade
 
@@ -131,8 +134,24 @@ constructor(
         val animatedBlurRadiusPx: Float by
             animateFloatAsState(targetValue = targetBlurRadiusPx, label = "NSOverlay-blurRadius")
 
-        OverlayShade(
-            panelElement = NotificationsShade.Elements.Panel,
+        // While the Edith media player is expanded, draw its blurred album-art backdrop behind the
+        // (translucent) shade, so pulling QS over the expanded player shows blurred art instead of
+        // reverting to the raw wallpaper. Composed with the same element key as in LockscreenContent
+        // so the shared-element transition carries it between the two scenes.
+        val mediaArtBackgroundViewModel =
+            rememberViewModel("NotificationsShadeOverlay-mediaArtBackground") {
+                mediaArtBackgroundViewModelFactory.create()
+            }
+
+        Box {
+            LockscreenMediaArtBackground(
+                mediaArtBackgroundViewModel,
+                Modifier.element(LockscreenElementKeys.MediaArtBackground)
+                    .blur(with(LocalDensity.current) { animatedBlurRadiusPx.toDp() }),
+            )
+
+            OverlayShade(
+                panelElement = NotificationsShade.Elements.Panel,
             alignmentOnWideScreens = viewModel.alignmentOnWideScreens,
             statusBarHeightPx = viewModel.statusBarHeightPx,
             enableTransparency = viewModel.isTransparencyEnabled,
@@ -218,6 +237,8 @@ constructor(
                         }
                     },
                     shouldDrawScrimBackground = false,
+                    // Keep upstream behavior: no scrim background -> no scrim overscroll visuals.
+                    useScrimOverscrollVisuals = false,
                     modifier =
                         Modifier.fillMaxWidth().focusProperties {
                             // The `ScrollingNotificationPanel` is a compose placeholder. Therefore,
@@ -225,6 +246,7 @@ constructor(
                             onEnter = { stackScrollView.asView().requestFocus() }
                         },
                 )
+            }
             }
         }
     }

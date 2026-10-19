@@ -31,6 +31,7 @@ import com.android.systemui.media.remedia.ui.compose.MediaUiBehavior
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCarouselVisibility
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.FooterActionsController
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.qs.footer.ui.viewmodel.FooterActionsViewModel
 import com.android.systemui.qs.panels.domain.interactor.TileSquishinessInteractor
 import com.android.systemui.qs.panels.ui.viewmodel.MediaInRowInLandscapeViewModel
@@ -40,6 +41,7 @@ import com.android.systemui.scene.domain.interactor.SceneInteractor
 import com.android.systemui.scene.shared.model.Overlays
 import com.android.systemui.scene.shared.model.SceneFamilies
 import com.android.systemui.scene.shared.model.Scenes
+import com.android.systemui.scene.shared.model.isKeyguardScene
 import com.android.systemui.shade.domain.interactor.ShadeModeInteractor
 import com.android.systemui.shade.domain.interactor.ShadeStatusBarComponentsInteractor
 import com.android.systemui.shade.shared.model.ShadeMode
@@ -51,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -80,7 +83,23 @@ constructor(
     windowRootViewBlurInteractor: WindowRootViewBlurInteractor,
     mediaInRowInLandscapeViewModelFactory: MediaInRowInLandscapeViewModel.Factory,
     shadeStatusBarComponentsInteractor: ShadeStatusBarComponentsInteractor,
+    private val mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
 ) : HydratedActivatable() {
+
+    /**
+     * Whether the Edith lock screen media player is expanded **and we are on a keyguard scene**.
+     * The expansion is lock-screen-only UI: off the lockscreen (e.g. on the home screen with the
+     * shade pulled) it must not hide the notification area or block the expanded QS. The underlying
+     * expansion state is preserved across unlock, so re-locking restores it.
+     */
+    val isMediaExpanded: Boolean by
+        combine(
+                mediaExpansionInteractor.isExpandedFlow,
+                sceneInteractor.currentScene,
+            ) { expanded, scene ->
+                expanded && scene.isKeyguardScene()
+            }
+            .hydratedStateOf(initialValue = false)
 
     /**
      * Whether the shade container transparency effect should be enabled (`true`), or whether to

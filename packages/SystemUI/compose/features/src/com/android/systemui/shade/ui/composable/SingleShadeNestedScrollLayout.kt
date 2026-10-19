@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
@@ -192,7 +193,25 @@ fun ContentScope.SingleShadeNestedScrollLayout(
                         statusBarHeader()
                     }
                 },
-                { mediaAndQqsHeader() },
+                {
+                    // Fade the QQS/Quick Actions header as the notification stack scrolls up and
+                    // over it. With the notification scrim drawing no fill, the stack is
+                    // transparent below its cards, so an opaque header behind it would bleed
+                    // through. Alpha tracks the overlap between the scrim's top edge and the
+                    // header, holding solid until the stack is ~42% into the header (same ramp as
+                    // the notification content) and fading to 0 at full overlap.
+                    val overlap =
+                        if (overlappableHeaderHeight.intValue > 0) {
+                            (-scrimOffset.value / overlappableHeaderHeight.intValue)
+                                .coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
+                    val headerAlpha = 1f - ((overlap - 0.42f) / 0.58f).coerceIn(0f, 1f)
+                    Box(modifier = Modifier.graphicsLayer { alpha = headerAlpha }) {
+                        mediaAndQqsHeader()
+                    }
+                },
                 {
                     val flingBehavior = ScrollableDefaults.flingBehavior()
                     Box(

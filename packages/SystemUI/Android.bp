@@ -1171,3 +1171,16 @@ android_library {
     ],
     platform_apis: true,
 }
+
+// Exported so the Edith SystemUI APK can reuse the stock manifest without copying it.
+filegroup {
+    name: "SystemUI-app-manifest",
+    srcs: ["AndroidManifest.xml"],
+    visibility: ["//packages/apps/EdithSystemUI:__pkg__"],
+}
+
+filegroup {
+    name: "SystemUI-custom-manifest",
+    srcs: ["CustomManifest.xml"],
+    visibility: ["//packages/apps/EdithSystemUI:__pkg__"],
+}

@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 
-/** Exposes whether the compact lock screen media player is enabled as a [StateFlow]. */
+/** Exposes the Edith lock screen media player toggles as [StateFlow]s. */
 @SysUISingleton
 class EdithLockscreenMediaInteractor
 @Inject
@@ -34,4 +34,8 @@ constructor(
 ) {
     val isCompact: StateFlow<Boolean> =
         repository.isCompact.stateIn(scope, SharingStarted.Eagerly, false)
+
+    /** Whether tapping the lock screen media card expands it. Enabled by default. */
+    val isExpandable: StateFlow<Boolean> =
+        repository.isExpandable.stateIn(scope, SharingStarted.Eagerly, true)
 }

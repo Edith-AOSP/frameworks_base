@@ -17,6 +17,7 @@
 package com.android.systemui.shade.ui.composable
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -26,20 +27,39 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import com.android.compose.animation.scene.ContentScope
+import com.android.systemui.keyguard.ui.composable.LockscreenMediaArtBackground
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel
 import com.android.systemui.shade.ui.ShadeColors
 
 /** Scrim for QS/Shade, this will fill the max size, so it should be inside a Box like layout. */
 @Composable
-fun ContentScope.ShadePanelScrim(isTransparencyEnabled: Boolean, modifier: Modifier = Modifier) {
+fun ContentScope.ShadePanelScrim(
+    isTransparencyEnabled: Boolean,
+    modifier: Modifier = Modifier,
+    mediaArtBackgroundViewModel: LockscreenMediaArtBackgroundViewModel? = null,
+) {
     // This is the background for the whole scene, as the elements don't necessarily provide
     // a background that extends to the edges.
-    Spacer(
-        modifier =
-            modifier
-                .element(Shade.Elements.BackgroundScrim)
-                .fillMaxSize()
-                .background(color = scrimColor(isTransparencyEnabled))
-    )
+    val color = scrimColor(isTransparencyEnabled)
+    if (mediaArtBackgroundViewModel != null) {
+        // Draw the expanded player's blurred album-art backdrop *inside* the scrim element, behind
+        // the scrim fill. Keeping it inside the single BackgroundScrim element (rather than a
+        // separate full-screen layer) means the shade -> QS transition still sees one element and
+        // does not glitch. The scrim color is unchanged (its transparency comes from
+        // isTransparencyEnabled); the art simply sits behind it.
+        Box(modifier = modifier.element(Shade.Elements.BackgroundScrim).fillMaxSize()) {
+            LockscreenMediaArtBackground(mediaArtBackgroundViewModel, Modifier.fillMaxSize())
+            Spacer(modifier = Modifier.fillMaxSize().background(color = color))
+        }
+    } else {
+        Spacer(
+            modifier =
+                modifier
+                    .element(Shade.Elements.BackgroundScrim)
+                    .fillMaxSize()
+                    .background(color = color)
+        )
+    }
 }
 
 @Composable

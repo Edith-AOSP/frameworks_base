@@ -68,6 +68,11 @@ fun TransitionBuilder.toSingleShadeTransition(
         translate(Notifications.Elements.NotificationScrim, Edge.Top, false)
         fractionRange(start = .42f, easing = Easings.Legacy) {
             fade(Notifications.Elements.StackPlaceholder)
+            // On phones the notification panel slides up and over the QQS/Quick Actions tiles.
+            // Now that the notification scrim draws no fill, the tiles would otherwise stay fully
+            // opaque until the Shade scene unmounts and visibly "pop". Fade them with the same
+            // ramp as the notification content that overruns them.
+            fade(QuickSettings.Elements.QuickQuickSettingsAndMedia)
         }
     }
 

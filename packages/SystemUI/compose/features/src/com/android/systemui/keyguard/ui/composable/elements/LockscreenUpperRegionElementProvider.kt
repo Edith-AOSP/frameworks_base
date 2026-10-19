@@ -122,7 +122,9 @@ constructor(
             Box(modifier = Modifier.fillMaxSize().then(modifier)) {
                 AODNotifications(Modifier.align(aodAlignment))
                 // Make the Notification section overlap with the AOD icons, to avoid jumps while
-                // animating them in.
+                // animating them in. (While the media player is expanded the notification stack is
+                // faded out via its view alpha in SharedNotificationContainerViewModel, since the
+                // real NSSL is a view positioned by the placeholder, not this composable.)
                 AnimatedVisibility(viewModel.isNotificationStackActive) {
                     LockscreenElement(
                         Notifications.Stack,
@@ -209,6 +211,8 @@ constructor(
                 logDecision("NarrowLayout: ClockSize") {
                     viewModel.evaluateClockSize {
                         when {
+                            // The expanded media player always uses the small clock (top).
+                            viewModel.isMediaExpanded -> Decision(ClockSize.SMALL, "isMediaExpanded")
                             viewModel.isNotificationStackActive ->
                                 Decision(ClockSize.SMALL, "isNotificationStackActive")
                             viewModel.isMediaVisible -> Decision(ClockSize.SMALL, "isMediaVisible")

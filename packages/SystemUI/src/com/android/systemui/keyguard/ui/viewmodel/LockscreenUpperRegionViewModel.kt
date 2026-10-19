@@ -27,6 +27,7 @@ import com.android.systemui.keyguard.shared.model.ClockSizeSetting
 import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.ui.composable.elements.UnfoldTranslations
 import com.android.systemui.lifecycle.HydratedActivatable
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.shade.domain.interactor.ShadeModeInteractor
 import com.android.systemui.shade.shared.model.ShadeMode
 import com.android.systemui.statusbar.notification.domain.interactor.ActiveNotificationsInteractor
@@ -49,6 +50,7 @@ constructor(
     private val activeNotificationsInteractor: ActiveNotificationsInteractor,
     private val desktopInteractor: DesktopInteractor,
     private val transitionInteractor: KeyguardTransitionInteractor,
+    private val mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
 ) : HydratedActivatable() {
     data class Decision<T>(val choice: T, val reason: String)
 
@@ -60,6 +62,13 @@ constructor(
 
     val isMediaVisible: Boolean
         get() = keyguardMediaViewModel.isMediaVisible
+
+    /**
+     * Whether the lock screen media player is expanded into the square-art view. While expanded, the
+     * notification stack is hidden (the expanded player owns the screen).
+     */
+    val isMediaExpanded: Boolean
+        get() = mediaExpansionInteractor.isExpanded
 
     val isNotificationStackActive: Boolean by
         activeNotificationsInteractor.areAnyNotificationsPresent.hydratedStateOf(

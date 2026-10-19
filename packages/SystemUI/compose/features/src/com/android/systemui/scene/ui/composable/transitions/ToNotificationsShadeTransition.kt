@@ -48,6 +48,13 @@ fun TransitionBuilder.toNotificationsShadeTransition(
         enabled = enableSharedElements,
         elevateInContent = Overlays.NotificationsShade,
     )
+    // The expanded media player's full-screen album-art backdrop must also survive the transition
+    // into the shade, otherwise the wallpaper would flash through while the shade is translucent.
+    sharedElement(
+        LockscreenElementKeys.MediaArtBackground,
+        enabled = enableSharedElements,
+        elevateInContent = Overlays.NotificationsShade,
+    )
     sharedElement(Notifications.Elements.StackPlaceholder, enabled = enableSharedElements)
     sharedElement(
         Notifications.Elements.HeadsUpNotificationPlaceholder,

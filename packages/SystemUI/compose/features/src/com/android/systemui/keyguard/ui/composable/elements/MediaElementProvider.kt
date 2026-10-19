@@ -35,6 +35,8 @@ import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenEl
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementKeys
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementProvider
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenScope
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
+import com.android.systemui.qs.edith.EdithMediaClockTintInteractor
 import com.android.systemui.shade.ShadeDisplayAware
 import javax.inject.Inject
 import kotlin.collections.List
@@ -45,6 +47,10 @@ class MediaElementProvider
 constructor(
     @ShadeDisplayAware private val context: Context,
     private val mediaViewModelFactory: KeyguardMediaViewModel.Factory,
+    private val expansionInteractor: EdithLockscreenMediaExpansionInteractor,
+    // Force-instantiated so its init observer (which pushes the album-art tint into the clock) runs;
+    // Dagger singletons are otherwise created lazily and this would never be constructed.
+    @Suppress("UNUSED_PARAMETER") private val clockTintInteractor: EdithMediaClockTintInteractor,
 ) : LockscreenElementProvider {
     override val elements: List<LockscreenElement> by lazy { listOf(MediaCarouselElement()) }
 
@@ -63,6 +69,7 @@ constructor(
                 enter = expandVertically(expandFrom = Alignment.Top),
                 exit = fadeOut(),
             ) {
+                val expanded = viewModel.isExpandable && expansionInteractor.isExpanded
                 Media(
                     viewModelFactory = viewModel.mediaViewModelFactory,
                     presentationStyle =
@@ -77,6 +84,11 @@ constructor(
                     location = Media.Location.LOCKSCREEN,
                     // No panel-expansion coupling on the lock screen: the card is static.
                     animateWithExpansion = false,
+                    expanded = expanded,
+                    onCollapse = { expansionInteractor.collapse() },
+                    onExpansionDragProgress = { expansionInteractor.setProgress(it) },
+                    onCardBodyClick = { expansionInteractor.expand() },
+                    drawArtBackground = !expanded,
                 )
             }
         }

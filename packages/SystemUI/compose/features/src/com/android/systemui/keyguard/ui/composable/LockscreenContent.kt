@@ -50,6 +50,7 @@ import com.android.systemui.keyguard.ui.composable.modifier.nonAuthUI
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenBehindScrimViewModel
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenContentViewModel
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenFrontScrimViewModel
+import com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel
 import com.android.systemui.keyguard.ui.viewmodel.ViewStateAccessor
 import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.plugins.keyguard.ui.composable.elements.LockscreenElementContext
@@ -72,6 +73,8 @@ class LockscreenContent(
     private val viewModelFactory: LockscreenContentViewModel.Factory,
     private val lockscreenFrontScrimViewModelFactory: LockscreenFrontScrimViewModel.Factory,
     private val lockscreenBehindScrimViewModelFactory: LockscreenBehindScrimViewModel.Factory,
+    private val lockscreenMediaArtBackgroundViewModelFactory:
+        LockscreenMediaArtBackgroundViewModel.Factory,
     private val lockscreenElements: LockscreenElements,
     private val clockInteractor: KeyguardClockInteractor,
     private val interactionJankMonitor: InteractionJankMonitor,
@@ -101,6 +104,10 @@ class LockscreenContent(
         val lockscreenBehindScrimViewModel =
             rememberViewModel("LockscreenContent-behindScrimViewModel") {
                 lockscreenBehindScrimViewModelFactory.create()
+            }
+        val lockscreenMediaArtBackgroundViewModel =
+            rememberViewModel("LockscreenContent-mediaArtBackgroundViewModel") {
+                lockscreenMediaArtBackgroundViewModelFactory.create()
             }
 
         // Alpha for the animation when transitioning from Shade scene to Lockscreen Scene and
@@ -157,6 +164,13 @@ class LockscreenContent(
         LockscreenBehindScrim(
             lockscreenBehindScrimViewModel,
             Modifier.element(LockscreenElementKeys.BehindScrim),
+        )
+        // Full-screen blurred album-art backdrop, drawn behind the lock screen content while the
+        // media player is expanded. It is an element (like the scrim above) so it can be elevated
+        // into the notifications shade, otherwise it would disappear when the shade opens.
+        LockscreenMediaArtBackground(
+            lockscreenMediaArtBackgroundViewModel,
+            Modifier.element(LockscreenElementKeys.MediaArtBackground),
         )
         CompositionLocalProvider(
             LocalLockscreenBlurAlpha provides {
