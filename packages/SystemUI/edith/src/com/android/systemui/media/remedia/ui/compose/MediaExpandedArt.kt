@@ -18,7 +18,10 @@ package com.android.systemui.media.remedia.ui.compose
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -34,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -56,8 +61,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.shared.model.asImageBitmap
+import com.android.systemui.media.remedia.motionart.FadingMotionArtVideo
+import com.android.systemui.media.remedia.motionart.MOTION_ART_FADE_IN_MS
 import com.android.systemui.media.remedia.ui.viewmodel.MediaCardViewModel
 import com.android.systemui.res.R
+import java.io.File
 import kotlinx.coroutines.launch
 
 /**
@@ -89,6 +97,9 @@ fun ExpandedMediaArt(
     layoutProgress: Animatable<Float, AnimationVector1D>,
     onCollapse: () -> Unit,
     onProgressChanged: (Float) -> Unit = {},
+    // Square motion art of the shown album, passed only while the player is expanded (see
+    // `Media.kt`).
+    squareMotionArt: File? = null,
     modifier: Modifier = Modifier,
     // Height of the collapsed card's art banner. Matches the active presentation style so the
     // collapsed card keeps its fixed height (e.g. the compact two-row card is shorter).
@@ -189,6 +200,7 @@ fun ExpandedMediaArt(
             MorphingArt(
                 image = card.background,
                 scrimColor = card.colorScheme?.background,
+                video = squareMotionArt,
                 progress = progress,
                 artWidth = artWidth,
                 artHeight = artHeight,
@@ -242,6 +254,9 @@ fun ExpandedMediaArt(
 private fun MorphingArt(
     image: Icon?,
     scrimColor: Color?,
+    // Square (1:1) motion art of the album, drawn inside this art box: it fades in over the still,
+    // which is dropped once that fade completes, so the box stays a single art surface.
+    video: File?,
     progress: Animatable<Float, AnimationVector1D>,
     artWidth: Dp,
     artHeight: Dp,
@@ -257,6 +272,24 @@ private fun MorphingArt(
                 Icon.Loaded(it.drawable, contentDescription = null).asImageBitmap()
             }
         }
+
+    var videoRendering by remember(video) { mutableStateOf(false) }
+    // Both directions of the static <-> animated switch are a crossfade: the player fades in over
+    // the still, and fades out over it again when the file goes away, with the still fading back in
+    // underneath.
+    val stillAlpha by
+        animateFloatAsState(
+            targetValue = if (videoRendering) 0f else 1f,
+            animationSpec =
+                if (videoRendering) {
+                    // Delayed by the fade-in, so the video has covered the still by the time it
+                    // goes away.
+                    tween(durationMillis = 200, delayMillis = MOTION_ART_FADE_IN_MS)
+                } else {
+                    tween(durationMillis = MOTION_ART_FADE_IN_MS, easing = LinearEasing)
+                },
+            label = "motionArtStill",
+        )
 
     Box(
         modifier =
@@ -306,25 +339,36 @@ private fun MorphingArt(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier =
-                        Modifier.fillMaxWidth().drawWithContent {
-                            scale(
-                                scaleX = Media.ART_OVER_CROP_SCALE,
-                                scaleY = Media.ART_OVER_CROP_SCALE,
-                            ) {
-                                this@drawWithContent.drawContent()
-                            }
-                            // When collapsed, overlay the album-art colour scrim (the same flat
-                            // 50% scrim the card background draws); fade it out as the art morphs
-                            // into the expanded square, which has no scrim.
-                            if (scrimColor != null) {
-                                val scrimAlpha = (1f - progress.value).coerceIn(0f, 1f)
-                                if (scrimAlpha > 0f) {
-                                    drawRect(color = scrimColor.copy(alpha = 0.5f * scrimAlpha))
+                        Modifier.fillMaxWidth()
+                            .graphicsLayer { alpha = stillAlpha }
+                            .drawWithContent {
+                                scale(
+                                    scaleX = Media.ART_OVER_CROP_SCALE,
+                                    scaleY = Media.ART_OVER_CROP_SCALE,
+                                ) {
+                                    this@drawWithContent.drawContent()
                                 }
-                            }
-                        },
+                                // While collapsed the art carries the album-art colour scrim (the
+                                // same flat 50% overlay the card background draws), which fades out
+                                // as the art morphs into the expanded square; the square has none.
+                                if (scrimColor != null) {
+                                    val scrimAlpha = (1f - progress.value).coerceIn(0f, 1f)
+                                    if (scrimAlpha > 0f) {
+                                        drawRect(
+                                            color = scrimColor.copy(alpha = 0.5f * scrimAlpha)
+                                        )
+                                    }
+                                }
+                            },
                 )
             }
+            // The motion art is drawn in the same box: it fades in over the still and back out into
+            // it, and the still stays if the video never renders.
+            FadingMotionArtVideo(
+                file = video,
+                modifier = Modifier.matchParentSize(),
+                onRendering = { videoRendering = true },
+            )
         }
     }
 }

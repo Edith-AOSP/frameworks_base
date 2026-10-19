@@ -22,9 +22,11 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.lifecycle.HydratedActivatable
 import com.android.systemui.media.remedia.data.repository.MediaRepository
 import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
+import com.android.systemui.qs.edith.EdithLockscreenMediaRepository
 import com.android.systemui.wallpapers.data.repository.WallpaperRepository
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import java.io.File
 import kotlinx.coroutines.flow.combine
 
 /**
@@ -36,6 +38,7 @@ class LockscreenMediaArtBackgroundViewModel
 constructor(
     private val mediaRepository: MediaRepository,
     private val expansionInteractor: EdithLockscreenMediaExpansionInteractor,
+    lockscreenMediaRepository: EdithLockscreenMediaRepository,
     keyguardInteractor: KeyguardInteractor,
     deviceEntryInteractor: DeviceEntryInteractor,
     wallpaperRepository: WallpaperRepository,
@@ -83,6 +86,28 @@ constructor(
     /** Whether the backdrop should currently render. */
     val isExpanded: Boolean
         get() = progress > 0f
+
+    /** Whether dynamic (video) album art may be fetched and played. */
+    private val motionArtEnabled: Boolean by
+        lockscreenMediaRepository.isMotionArt.hydratedStateOf(initialValue = false)
+
+    val isMotionArtEnabled: Boolean
+        get() = motionArtEnabled
+
+    /** Artist and title of the shown session, used to look up its motion art. */
+    val track: Pair<String, String>?
+        get() {
+            val media = mediaRepository.currentMedia
+            if (media.isEmpty()) return null
+            val index = mediaRepository.currentCarouselIndex.coerceIn(0, media.size - 1)
+            val shown = media[index]
+            return shown.subtitle to shown.title
+        }
+
+    /** Hands the resolved square motion art to the expanded player (it draws it in the art square). */
+    fun setSquareMotionArt(file: File?) {
+        expansionInteractor.setSquareMotionArt(file)
+    }
 
     @AssistedFactory
     interface Factory {

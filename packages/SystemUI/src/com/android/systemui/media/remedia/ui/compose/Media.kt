@@ -195,6 +195,7 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaSettingsButtonViewMo
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.verticalSquish
 import com.android.systemui.res.R
+import java.io.File
 import kotlin.math.abs
 import kotlin.math.min
 import kotlinx.coroutines.launch
@@ -233,6 +234,9 @@ fun Media(
     onCollapse: () -> Unit = {},
     // Notifies the expansion drag progress in [0,1] while the user drags the expanded art.
     onExpansionDragProgress: (Float) -> Unit = {},
+    // Square (1:1) motion art of the shown album, resolved by the lock screen art backdrop. Played
+    // inside the expanded art square; `null` when the album has none.
+    squareMotionArt: File? = null,
 ) {
     val context = LocalContext.current
     val viewModel: MediaViewModel =
@@ -311,6 +315,8 @@ fun Media(
             layoutProgress = layoutProgress,
             onCollapse = onCollapse,
             onProgressChanged = onExpansionDragProgress,
+            // The collapsed banner gets no video; decoding one there would be wasted work.
+            squareMotionArt = squareMotionArt.takeIf { expanded },
             modifier = modifier,
             // The collapsed card keeps the height of the active presentation style (the compact
             // two-row card is shorter than the three-row one).

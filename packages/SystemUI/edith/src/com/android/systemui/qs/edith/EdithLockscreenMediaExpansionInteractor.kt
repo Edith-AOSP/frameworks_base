@@ -25,6 +25,7 @@ import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.media.controls.domain.pipeline.interactor.MediaCarouselInteractor
 import com.android.systemui.media.remedia.data.repository.MediaRepository
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.combine
@@ -65,11 +66,22 @@ constructor(
      */
     private var _progress: Float by mutableFloatStateOf(0f)
 
+    /**
+     * Square (1:1) motion art of the shown track, if the album has one and motion art is enabled.
+     * Resolved by the lock screen art backdrop — which knows the track and is composed whenever the
+     * player is — and played inside the expanded art square; `null` while it is unknown, when the
+     * album has none, or when motion art is turned off.
+     */
+    private var _squareMotionArt: File? by mutableStateOf(null)
+
     /** The session the current expansion belongs to, so a session change resets the state. */
     private var sessionKey: InstanceId? = null
 
     val isExpanded: Boolean
         get() = _isExpanded
+
+    val squareMotionArt: File?
+        get() = _squareMotionArt
 
     val progress: Float
         get() = _progress
@@ -100,6 +112,8 @@ constructor(
             .onEach { key ->
                 if (key != sessionKey) {
                     sessionKey = key
+                    // The resolved file belongs to one album, so a session change discards it.
+                    _squareMotionArt = null
                     if (key == null) collapseAndReset()
                 }
             }
@@ -129,6 +143,12 @@ constructor(
     private fun collapseAndReset() {
         _isExpanded = false
         _progress = 0f
+        _squareMotionArt = null
+    }
+
+    /** Sets the resolved square motion art of the shown track (see [squareMotionArt]). */
+    fun setSquareMotionArt(file: File?) {
+        if (_squareMotionArt != file) _squareMotionArt = file
     }
 
     /** Toggles the expanded state. */

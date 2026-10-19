@@ -56,6 +56,17 @@ constructor(
             .distinctUntilChanged()
             .flowOn(backgroundDispatcher)
 
+    /**
+     * Whether the expanded lock screen media player may fetch dynamic (video) album art. Enabled by
+     * default: when a track has no motion art — or there is no network — the static cover is used
+     * instead.
+     */
+    val isMotionArt: Flow<Boolean> =
+        secureSettingsRepository
+            .boolSetting(MOTION_ART_SETTING_NAME, defaultValue = true)
+            .distinctUntilChanged()
+            .flowOn(backgroundDispatcher)
+
     companion object {
         /**
          * [Settings.Secure] key for the compact lock screen media player. Referenced as a string
@@ -68,5 +79,12 @@ constructor(
          * string (rather than a framework constant) so this can ship as a SystemUI-only change.
          */
         const val EXPANDABLE_SETTING_NAME = "edith_lockscreen_media_expandable"
+
+        /**
+         * [Settings.Secure] key for dynamic (video) album art on the lock screen media player.
+         * Referenced as a string (rather than a framework constant) so this can ship as a
+         * SystemUI-only change.
+         */
+        const val MOTION_ART_SETTING_NAME = "edith_lockscreen_motion_art"
     }
 }

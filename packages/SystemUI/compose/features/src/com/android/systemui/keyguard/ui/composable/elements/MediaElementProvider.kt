@@ -89,6 +89,7 @@ constructor(
                     onExpansionDragProgress = { expansionInteractor.setProgress(it) },
                     onCardBodyClick = { expansionInteractor.expand() },
                     drawArtBackground = !expanded,
+                    squareMotionArt = expansionInteractor.squareMotionArt,
                 )
             }
         }
