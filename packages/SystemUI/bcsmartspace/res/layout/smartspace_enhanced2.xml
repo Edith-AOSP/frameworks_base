@@ -15,6 +15,7 @@
         android:layout_gravity="start|bottom"
         android:id="@+id/smartspace_page_indicator"
         android:paddingTop="@dimen/page_indicator_padding_top"
+        android:paddingBottom="@dimen/page_indicator_padding_bottom"
         android:visibility="visible"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

@@ -33,6 +33,10 @@
     <dimen name="page_indicator_dot_margin">3.0dip</dimen>
     <dimen name="page_indicator_dot_size">6.0dip</dimen>
     <dimen name="page_indicator_padding_top">10.0dip</dimen>
+    <!-- The dots sit at the very bottom of the smartspace frame, so without bottom padding they
+         land right on the collapsed media player underneath. This lifts them back up into the
+         pager's bottom slack and leaves a visible gap above the player. -->
+    <dimen name="page_indicator_padding_bottom">10.0dip</dimen>
     <dimen name="smartspaceLetterSpacing">0.01</dimen>
     <dimen name="subtitle_hit_rect_height">48.0dip</dimen>
     <dimen name="weather_dream_complication_icon_dimen">36.0dip</dimen>
