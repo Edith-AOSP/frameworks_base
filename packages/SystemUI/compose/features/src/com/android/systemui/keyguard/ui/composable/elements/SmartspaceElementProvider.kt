@@ -235,7 +235,7 @@ constructor(
                         Modifier.then(widthMod)
                             .padding(
                                 bottom =
-                                    dimensionResource(R.dimen.keyguard_status_view_bottom_margin)
+                                    dimensionResource(R.dimen.edith_smartspace_cards_bottom_margin)
                             )
                             .burnInAware(isClock = false)
                             .nonAuthUI(),

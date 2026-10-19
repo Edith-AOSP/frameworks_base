@@ -29,8 +29,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.compose.animation.scene.ElementContentScope
 import com.android.systemui.customization.clocks.R as clocksR
@@ -104,14 +106,49 @@ constructor(
                     }
                 }
 
+                val smartspaceCardsTopOverlap =
+                    dimensionResource(R.dimen.edith_smartspace_cards_top_overlap)
+                val smartspaceDwaRowOverlap =
+                    dimensionResource(R.dimen.edith_smartspace_dwa_row_overlap)
+
                 if (shouldDateWeatherBeBelowSmallClock) {
+                    // The date/weather row is laid out under the clock row, which reserves the small
+                    // clock's full height while the glyphs end well above it. Pull the row up into
+                    // that slack so it sits the same distance below the clock as the card does in
+                    // the beside-clock layout. Its own overlap is smaller than the card's: the row
+                    // is a short view with the text centred in it, so it already carries slack that
+                    // the card does not.
                     LockscreenElement(
                         Smartspace.DWA.SmallClock.Row,
-                        Modifier.padding(horizontal = smartspaceXPadding),
+                        Modifier.padding(horizontal = smartspaceXPadding)
+                            .pullUp(smartspaceDwaRowOverlap),
                     )
                 }
 
-                LockscreenElement(Smartspace.Cards)
+                LockscreenElement(
+                    Smartspace.Cards,
+                    // Compose has no negative padding, so pullUp both shrinks the space the card
+                    // reports and offsets it upwards, tucking the card into the slack the small
+                    // clock reserves below its glyphs. Everything laid out after it (the media card)
+                    // moves up with it.
+                    //
+                    // Nothing is reserved here: the card's view already measures its full height
+                    // while it has a target, so the overlap only ever applies to a card that is
+                    // actually showing. With no card the element collapses to zero and the media
+                    // card keeps the clock's full breathing room instead of an empty band.
+                    //
+                    // When the date/weather wraps below the clock instead, the card gets a smaller
+                    // overlap: its view is a full-height pager with the shorter card centred inside
+                    // it, so it carries slack above its first line that would otherwise read as a
+                    // gap after the date/weather row.
+                    Modifier.pullUp(
+                        if (shouldDateWeatherBeBelowSmallClock) {
+                            dimensionResource(R.dimen.edith_smartspace_cards_below_dwa_overlap)
+                        } else {
+                            smartspaceCardsTopOverlap
+                        }
+                    ),
+                )
             }
         }
     }
@@ -179,5 +216,21 @@ constructor(
                 }
             }
         }
+    }
+
+    companion object {
+        /**
+         * Compose has no negative padding, so emulate it: report a height reduced by [overlap] and
+         * place the content shifted up by the same amount. The content overflows upwards into the
+         * space laid out above, and everything laid out after this element moves up with it.
+         */
+        private fun Modifier.pullUp(overlap: Dp): Modifier =
+            layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val overlapPx = overlap.roundToPx()
+                layout(placeable.width, (placeable.height - overlapPx).coerceAtLeast(0)) {
+                    placeable.place(0, -overlapPx)
+                }
+            }
     }
 }
