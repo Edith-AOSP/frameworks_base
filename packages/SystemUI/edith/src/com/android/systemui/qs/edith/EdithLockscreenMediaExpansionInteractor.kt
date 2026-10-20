@@ -20,6 +20,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import com.android.internal.logging.InstanceId
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -67,6 +70,8 @@ constructor(
      */
     private var _progress: Float by mutableFloatStateOf(0f)
 
+    private val _progressFlow = MutableStateFlow(0f)
+
     /**
      * Square (1:1) motion art of the shown track, if the album has one and motion art is enabled.
      * Resolved by the lock screen art backdrop — which knows the track and is composed whenever the
@@ -86,6 +91,9 @@ constructor(
 
     val progress: Float
         get() = _progress
+
+    /** [progress] as a [StateFlow], for consumers outside composition (the notification stack). */
+    val progressFlow: StateFlow<Float> = _progressFlow.asStateFlow()
 
     /** Snapshot-backed flow of [isExpanded] (re-emits on change), for combining into other flows. */
     val isExpandedFlow: kotlinx.coroutines.flow.Flow<Boolean> =
@@ -151,6 +159,7 @@ constructor(
     private fun collapseAndReset() {
         _isExpanded = false
         _progress = 0f
+        _progressFlow.value = 0f
         _squareMotionArt = null
     }
 
@@ -166,7 +175,9 @@ constructor(
 
     /** Sets the raw animation/drag progress in `[0, 1]` (used by the ambient backdrop). */
     fun setProgress(progress: Float) {
-        _progress = progress.coerceIn(0f, 1f)
+        val clamped = progress.coerceIn(0f, 1f)
+        _progress = clamped
+        _progressFlow.value = clamped
     }
 }
 

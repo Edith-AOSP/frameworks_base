@@ -57,6 +57,7 @@ import com.android.systemui.statusbar.notification.stack.shared.model.Accessibil
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimClipping
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrimShape
 import com.android.systemui.statusbar.notification.stack.shared.model.ShadeScrollState
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationTransitionThresholds.EXPANSION_FOR_DELAYED_STACK_FADE_IN
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.NotificationTransitionThresholds.EXPANSION_FOR_MAX_SCRIM_ALPHA
 import com.android.systemui.util.kotlin.ActivatableFlowDumper
@@ -99,6 +100,7 @@ constructor(
     keyguardInteractor: Lazy<KeyguardInteractor>,
     @ShadeDisplayAware configurationInteractor: ConfigurationInteractor,
     @ShadeDisplayAware private val context: Context,
+    private val mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
 ) :
     ActivatableFlowDumper by ActivatableFlowDumperImpl(dumpManager, "NotificationScrollViewModel"),
     ExclusiveActivatable() {
@@ -421,6 +423,9 @@ constructor(
 
     /** The alpha of the Notification Stack for lockscreen fade-in */
     val alphaForLockscreenFadeIn = stackAppearanceInteractor.alphaForLockscreenFadeIn
+
+    /** Progress of the expanded media player, used to fade the stack out bottom-up. */
+    val mediaExpansionProgress: Flow<Float> = mediaExpansionInteractor.progressFlow
 
     /** Whether the current scene is lockscreen */
     val isCurrentSceneLockscreen =

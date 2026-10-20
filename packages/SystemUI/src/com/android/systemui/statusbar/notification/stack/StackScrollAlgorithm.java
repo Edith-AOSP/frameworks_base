@@ -164,10 +164,15 @@ public class StackScrollAlgorithm {
 
     private void updateAlphaState(StackScrollAlgorithmState algorithmState,
             AmbientState ambientState) {
+        final float mediaExpansion = ambientState.getMediaExpansionProgress();
+        final int visibleCount = algorithmState.visibleChildren.size();
+        int visibleIndex = 0;
         for (ExpandableView view : algorithmState.visibleChildren) {
             final ViewState viewState = view.getViewState();
             final boolean isHunGoingToShade = ambientState.isShadeExpanded()
                     && view == ambientState.getTrackedHeadsUpRow();
+            final int fromBottom = visibleCount - 1 - visibleIndex;
+            visibleIndex++;
 
             if (isHunGoingToShade) {
                 // Keep 100% opacity for heads up notification going to shade.
@@ -198,13 +203,23 @@ public class StackScrollAlgorithm {
                     viewState.setAlpha(1f - ambientState.getHideAmount(), "keyguard hun");
                 } else {
                     // Take into account scene container-specific Lockscreen fade-in progress
-                    final float alpha;
+                    float alpha;
                     if (ambientState.isLockscreenStackFadingIn()) {
                         alpha = ambientState.getLockscreenStackFadeInProgress();
                     } else {
                         alpha = 1f - ambientState.getDozeAmount();
                     }
 
+                    if (mediaExpansion > 0f && !view.isHeadsUpState()) {
+                        // The expanded media player grows over the stack. Fade it from the bottom
+                        // row up so rows leave one after another instead of riding the layout
+                        // down and out of view. Applied here, in the branch that already drives
+                        // the lockscreen stack's alpha, so it cannot be skipped by an earlier
+                        // condition.
+                        final float stagger =
+                                1f - (mediaExpansion * (visibleCount + 1) - fromBottom);
+                        alpha *= Math.max(0f, Math.min(1f, stagger));
+                    }
                     viewState.setAlpha(alpha, "keyguard notif");
                 }
             } else if (!SceneContainerFlag.isEnabled() && ambientState.isExpansionChanging()) {

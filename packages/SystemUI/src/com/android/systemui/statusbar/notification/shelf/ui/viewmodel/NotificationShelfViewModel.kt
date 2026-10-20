@@ -58,10 +58,10 @@ constructor(
     val isBlurSupported: Flow<Boolean> = windowRootViewBlurInteractor.isBlurCurrentlySupported
 
     /**
-     * Whether the Edith lock screen media player is expanded. While it is, the shelf (the row of
-     * notification icons in compact mode) is hidden: the expanded player owns the screen.
+     * Progress of the Edith lock screen media player's expansion. The shelf (the row of
+     * notification icons in compact mode) fades out with it and is hidden once it has taken over.
      */
-    val isMediaExpanded: Flow<Boolean> = mediaExpansionInteractor.isExpandedFlow
+    val mediaExpansionProgress: Flow<Float> = mediaExpansionInteractor.progressFlow
 
     /** Notifies that the user has clicked the shelf. */
     fun onShelfClicked() {

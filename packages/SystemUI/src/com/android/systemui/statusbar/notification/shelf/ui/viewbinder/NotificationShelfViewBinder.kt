@@ -43,7 +43,7 @@ object NotificationShelfViewBinder {
                 viewModel.canModifyColorOfNotifications.collect(::setCanModifyColorOfNotifications)
             }
             launch { viewModel.isClickable.collect(::setCanInteract) }
-            launch { viewModel.isMediaExpanded.collect(::setMediaExpanded) }
+            launch { viewModel.mediaExpansionProgress.collect(::setMediaExpansionProgress) }
 
             if (SceneContainerFlag.isEnabled) {
                 launch { viewModel.isAlignedToEnd.collect(::setAlignedToEnd) }

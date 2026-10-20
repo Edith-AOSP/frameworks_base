@@ -146,6 +146,9 @@ interface NotificationScrollView {
     /** set the alpha from 0-1f of stack fade-in on lockscreen */
     fun setAlphaForLockscreenFadeIn(alphaForLockscreenFadeIn: Float)
 
+    /** Progress of the expanded lock screen media player, used to fade the stack out bottom-up. */
+    fun setMediaExpansionProgress(progress: Float)
+
     /** Sets whether the current scene is lockscreen */
     fun setCurrentSceneLockscreen(isCurrentLockscreen: Boolean)
 

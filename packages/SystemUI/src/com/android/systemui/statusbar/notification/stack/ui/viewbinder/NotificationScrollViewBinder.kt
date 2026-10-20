@@ -126,6 +126,11 @@ constructor(
                 }
             }
             launch {
+                viewModel.mediaExpansionProgress.collectTraced {
+                    view.setMediaExpansionProgress(it)
+                }
+            }
+            launch {
                 viewModel.isCurrentSceneLockscreen.collectTraced {
                     view.setCurrentSceneLockscreen(it)
                 }

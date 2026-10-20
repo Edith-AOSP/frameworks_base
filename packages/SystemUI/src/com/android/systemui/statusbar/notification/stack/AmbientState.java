@@ -93,6 +93,7 @@ public class AmbientState implements Dumpable {
     private int mStatusBarState;
     private boolean mShowingStackOnLockscreen;
     private float mLockscreenStackFadeInProgress;
+    private float mMediaExpansionProgress;
     private float mExpandingVelocity;
     private boolean mPanelTracking;
     private boolean mExpansionChanging;
@@ -690,6 +691,20 @@ public class AmbientState implements Dumpable {
     public void setLockscreenStackFadeInProgress(float lockscreenStackFadeInProgress) {
         if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
         mLockscreenStackFadeInProgress = lockscreenStackFadeInProgress;
+    }
+
+    /**
+     * Progress of the expanded lock screen media player, 0..1. While it grows, the notification
+     * stack fades out row by row from the bottom up instead of just being pushed off screen.
+     */
+    public float getMediaExpansionProgress() {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return 0f;
+        return mMediaExpansionProgress;
+    }
+
+    public void setMediaExpansionProgress(float mediaExpansionProgress) {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
+        mMediaExpansionProgress = mediaExpansionProgress;
     }
 
     public void setCurrentSceneLockscreen(boolean isCurrentSceneLockscreen) {

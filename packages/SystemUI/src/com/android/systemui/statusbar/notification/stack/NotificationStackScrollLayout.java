@@ -6021,6 +6021,19 @@ public class NotificationStackScrollLayout
         }
     }
 
+    /**
+     * Progress of the expanded lock screen media player, used to fade the stack out bottom-up while
+     * the player grows.
+     */
+    public void setMediaExpansionProgress(float progress) {
+        if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;
+        float clamped = Math.max(0f, Math.min(1f, progress));
+        if (mAmbientState.getMediaExpansionProgress() != clamped) {
+            mAmbientState.setMediaExpansionProgress(clamped);
+            requestChildrenUpdate();
+        }
+    }
+
     @Override
     public void setAlphaForLockscreenFadeIn(float alphaForLockscreenFadeIn) {
         if (SceneContainerFlag.isUnexpectedlyInLegacyMode()) return;

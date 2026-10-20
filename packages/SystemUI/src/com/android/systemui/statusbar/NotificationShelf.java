@@ -100,7 +100,7 @@ public class NotificationShelf extends ActivatableNotificationView {
     private boolean mInteractive;
     private boolean mAnimationsEnabled = true;
     private boolean mShowNotificationShelf;
-    private boolean mMediaExpanded;
+    private float mMediaExpansionProgress;
     private final Rect mClipRect = new Rect();
     private int mIndexOfFirstViewInShelf = -1;
     private float mCornerAnimationDistance;
@@ -568,7 +568,7 @@ public class NotificationShelf extends ActivatableNotificationView {
         boolean isHidden = getViewState().hidden
                 || clipTopAmount >= getIntrinsicHeight()
                 || !mShowNotificationShelf
-                || mMediaExpanded
+                || mMediaExpansionProgress > 0.99f
                 || numViewsInShelf < 1f;
 
         setActualWidth(calcActualWidth(numViewsInShelf));
@@ -1112,15 +1112,19 @@ public class NotificationShelf extends ActivatableNotificationView {
     }
 
     /**
-     * Hides the shelf (and its notification icons) while the Edith lock screen media player is
-     * expanded, which owns the screen and replaces the notification icons with its own controls.
+     * Fades the shelf (and its notification icons) out as the Edith lock screen media player
+     * expands, which owns the screen and replaces the notification icons with its own controls.
+     * The icons are hidden once the player has fully taken over.
      */
-    public void setMediaExpanded(boolean mediaExpanded) {
-        if (mMediaExpanded != mediaExpanded) {
-            mMediaExpanded = mediaExpanded;
+    public void setMediaExpansionProgress(float progress) {
+        float clamped = Math.max(0f, Math.min(1f, progress));
+        if (mMediaExpansionProgress != clamped) {
+            mMediaExpansionProgress = clamped;
+            // Fade with the player instead of popping off when it is expanded.
+            setAlpha(1f - clamped);
             if (mAmbientState != null) {
                 // updateAppearance() recomputes isHidden and applies the visibility. Guarded
-                // because the flag can arrive before the shelf is bound to its host layout.
+                // because the progress can arrive before the shelf is bound to its host layout.
                 updateAppearance();
             }
         }
