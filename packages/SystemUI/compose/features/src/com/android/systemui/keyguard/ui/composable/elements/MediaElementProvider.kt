@@ -87,7 +87,14 @@ constructor(
                     expanded = expanded,
                     onCollapse = { expansionInteractor.collapse() },
                     onExpansionDragProgress = { expansionInteractor.setProgress(it) },
-                    onCardBodyClick = { expansionInteractor.expand() },
+                    // With the expandable player off, a body tap keeps the stock behaviour: the
+                    // Media card opens the playing app (its own onClick) instead of expanding.
+                    onCardBodyClick =
+                        if (viewModel.isExpandable) {
+                            { expansionInteractor.expand() }
+                        } else {
+                            null
+                        },
                     drawArtBackground = !expanded,
                     squareMotionArt = expansionInteractor.squareMotionArt,
                 )

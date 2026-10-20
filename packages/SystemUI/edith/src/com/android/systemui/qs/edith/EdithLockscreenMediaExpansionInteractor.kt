@@ -54,6 +54,7 @@ constructor(
     @Application applicationScope: CoroutineScope,
     mediaCarouselInteractor: MediaCarouselInteractor,
     mediaRepository: MediaRepository,
+    lockscreenMediaInteractor: EdithLockscreenMediaInteractor,
 ) {
 
     /** Whether the lock screen media player is currently expanded. */
@@ -117,6 +118,13 @@ constructor(
                     if (key == null) collapseAndReset()
                 }
             }
+            .launchIn(applicationScope)
+
+        // Turning the expandable player off collapses it: the card falls back to opening the
+        // playing app, and neither the backdrop nor the clock tint may linger from an expansion
+        // that is no longer allowed.
+        lockscreenMediaInteractor.isExpandable
+            .onEach { expandable -> if (!expandable) collapseAndReset() }
             .launchIn(applicationScope)
 
         // The expansion is preserved when the shade/QQS is opened on the lockscreen: the player
