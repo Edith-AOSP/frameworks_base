@@ -39,6 +39,7 @@ import com.android.systemui.deviceentry.domain.interactor.DeviceEntryInteractor
 import com.android.systemui.inputdevice.data.repository.PointerDeviceRepository
 import com.android.systemui.keyguard.data.repository.KeyguardRepository
 import com.android.systemui.keyguard.shared.model.KeyguardState
+import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.power.domain.interactor.PowerInteractor
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
@@ -91,6 +92,7 @@ constructor(
     private val pointerDeviceRepository: PointerDeviceRepository,
     private val wallpaperFocalAreaInteractor: WallpaperFocalAreaInteractor,
     secureLockDeviceInteractor: Lazy<SecureLockDeviceInteractor>,
+    private val mediaExpansionInteractor: EdithLockscreenMediaExpansionInteractor,
 ) {
     private val _udfpsAccessibilityOverlayBounds: MutableStateFlow<Rect?> = MutableStateFlow(null)
 
@@ -206,6 +208,11 @@ constructor(
      */
     fun onLongPress() {
         if (!isLongPressHandlingEnabled.value) {
+            return
+        }
+        // The expanded media player owns the lock screen; its settings entry would open the
+        // customisation UI over the player, so long-press does nothing while it is up.
+        if (mediaExpansionInteractor.isExpanded) {
             return
         }
 
