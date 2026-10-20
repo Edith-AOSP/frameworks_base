@@ -26,6 +26,7 @@ import com.android.systemui.scene.shared.model.Overlays
 import com.android.systemui.scene.shared.model.SceneContainerConfig
 import com.android.systemui.scene.shared.model.Scenes
 import com.android.systemui.scene.ui.FakeOverlay
+import com.android.systemui.qs.edith.EdithNotificationChipState
 import com.android.systemui.scene.ui.composable.ConstantSceneContainerTransitionsBuilder
 import com.android.systemui.scene.ui.composable.SceneContainerTransitions
 import com.android.systemui.scene.ui.viewmodel.SceneContainerHapticsViewModel
@@ -89,7 +90,9 @@ val Kosmos.fakeOverlays by Fixture { fakeOverlaysByKeys.values.toSet() }
 val Kosmos.overlays by Fixture { fakeOverlays }
 
 val Kosmos.sceneTransitionsBuilder by Fixture { ConstantSceneContainerTransitionsBuilder() }
-val Kosmos.sceneContainerTransitions by Fixture { SceneContainerTransitions() }
+val Kosmos.sceneContainerTransitions by Fixture {
+    SceneContainerTransitions(EdithNotificationChipState())
+}
 
 var Kosmos.sceneContainerConfig by Fixture {
     SceneContainerConfig(

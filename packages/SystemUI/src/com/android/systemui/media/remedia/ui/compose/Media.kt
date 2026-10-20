@@ -968,140 +968,11 @@ private fun ContentScope.CardForegroundContent(
         }
 
         if (threeRows) {
-            // Edith expanded layout:
-            //   1. Context header: (app icon) [App] on (output icon) [Device]
-            //   2. Metadata (title + artist), left aligned
-            //   3. Scrubber row: [elapsed] (seekbar) [duration]
-            //   4. Control bar: [left action] [prev] (pill play/pause) [next]
-            val areActionsVisible =
-                viewModel.actionButtonLayout == MediaCardActionButtonLayout.WithPlayPause
-
-            // 1. Context header: (app icon) App on (output device name >).
-            // The "(app icon) App on" part is keyed as an element that cross-fades (it exists only
-            // in this three-row scene), while the output control is a SEPARATE shared element
-            // (sibling, not nested) that morphs/slides between the two scenes.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
-            ) {
-                Element(key = Media.Elements.ContextHeader, modifier = Modifier) {
-                    EdithContextHeader(
-                        icon = viewModel.icon,
-                        iconTint = colorScheme.primary,
-                        appName = viewModel.appName,
-                        deviceName = deviceNameFor(viewModel.outputSwitcherChip),
-                        modifier = Modifier,
-                        // The card body tap expands the lock screen player, so the app is opened
-                        // from the header app icon instead (unchanged elsewhere — this is the same
-                        // click intent the card body used to run).
-                        onAppIconClick = { viewModel.onClick(expandable) },
-                    )
-                }
-                Spacer(Modifier.width(4.dp))
-                Element(key = Media.Elements.OutputControl, modifier = Modifier) {
-                    EdithOutputControl(viewModel = viewModel.outputSwitcherChip)
-                }
-            }
-
-            // 2. Metadata.
-            Metadata(
-                title = viewModel.title,
-                subtitle = viewModel.subtitle,
-                isExplicit = viewModel.isExplicit,
-                color = Color.White,
-                modifier =
-                    Modifier.fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 12.dp)
-                        .animateContentSize(),
+            EdithExpandedMediaRows(
+                viewModel = viewModel,
+                colorScheme = colorScheme,
+                expandable = expandable,
             )
-
-            // 3. Scrubber row. The timestamps sit flush against the same 16dp insets as the
-            // metadata above, so the row is horizontally balanced.
-            // Keyed as an element so the whole row (timestamps + seek bar) cross-fades during the
-            // morph; the row exists only in this scene.
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                val navigationViewModel = viewModel.navigation
-                Element(
-                    key = Media.Elements.ScrubberRow,
-                    modifier =
-                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp),
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (navigationViewModel is MediaNavigationViewModel.Showing) {
-                            TimestampText(navigationViewModel.progressText)
-                            EdithSeekBar(
-                                viewModel = navigationViewModel,
-                                modifier = Modifier.weight(1f),
-                            )
-                            TimestampText(navigationViewModel.durationText)
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-
-            // 4. Control bar: [additional0] [prev] (play) [next] [additional1], with the play/pause
-            // button centered. The far slots reserve equal width so the middle stays centered for
-            // 0/1/2 additional actions.
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                val navigationViewModel = viewModel.navigation as? MediaNavigationViewModel.Showing
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier =
-                        Modifier.fillMaxWidth()
-                            .padding(start = 8.dp, end = 8.dp, top = 0.dp, bottom = 8.dp),
-                ) {
-                    // Far-left slot: additional action #0 (or reserved space).
-                    SecondarySlot(viewModel = viewModel.additionalActions.getOrNull(0), elementIndex = 0)
-
-                    Spacer(Modifier.weight(1f))
-
-                    // Center group: skip back, play/pause, skip forward.
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        navigationViewModel?.left?.let {
-                            SecondaryAction(
-                                viewModel = it,
-                                modifier = Modifier.sysuiResTag(MediaRes.PREV_BTN),
-                                element = Media.Elements.PrevButton,
-                            )
-                        }
-
-                        if (areActionsVisible) {
-                            AnimatedVisibility(visible = viewModel.playPauseAction != null) {
-                                PlayPauseAction(
-                                    viewModel = viewModel.playPauseAction,
-                                    buttonColor = colorScheme.primary,
-                                    iconColor = colorScheme.onPrimary,
-                                    buttonCornerRadius = { isPlaying ->
-                                        if (isPlaying) 22.dp else 44.dp
-                                    },
-                                )
-                            }
-                        }
-
-                        navigationViewModel?.right?.let {
-                            SecondaryAction(
-                                viewModel = it,
-                                modifier = Modifier.sysuiResTag(MediaRes.NEXT_BTN),
-                                element = Media.Elements.NextButton,
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.weight(1f))
-
-                    // Far-right slot: additional action #1 (or reserved space).
-                    SecondarySlot(viewModel = viewModel.additionalActions.getOrNull(1), elementIndex = 1)
-                }
-            }
         } else {
             // Two row presentation style.
             //
@@ -1511,145 +1382,9 @@ private fun ContentScope.Navigation(
     }
 }
 
-/**
- * A bare seek bar (no navigation buttons on the sides), used by the Edith expanded media layout so
- * the slider can span the full width between the two timestamps. Behavior is identical to the seek
- * bar inside [Navigation].
- */
-@Composable
-private fun ContentScope.EdithSeekBar(
-    viewModel: MediaNavigationViewModel.Showing,
-    modifier: Modifier = Modifier,
-) {
-    val colors =
-        colors(
-            activeTrackColor = Color.White,
-            inactiveTrackColor = Color.White.copy(alpha = 0.3f),
-            thumbColor = Color.White,
-        )
-    if (viewModel.isIndeterminate) {
-        // No known duration (e.g. a livestream): a full-width, non-interactive track. It animates
-        // (squiggly) while playing and is static when paused. No thumb, no scrubbing.
-        Box(
-            modifier =
-                modifier
-                    .fillMaxWidth()
-                    .height(40.dp)
-                    .semantics { stateDescription = viewModel.contentDescription }
-        ) {
-            SeekBarTrack(
-                progress = { 1f },
-                isSquiggly = viewModel.isSquiggly,
-                colors = colors,
-                isThumbEnabled = false,
-                modifier = Modifier.fillMaxWidth().align(Alignment.Center),
-            )
-        }
-        return
-    }
-    val interactionSource = remember { MutableInteractionSource() }
-    val sliderDragDelta = remember {
-        // Not a mutableStateOf - this is never accessed in composition and using an anonymous
-        // object avoids generics boxing of inline Offset.
-        object {
-            var value = Offset.Zero
-        }
-    }
-    val isEnabled = viewModel.onScrubChange != null
-    val velocityTracker = remember { VelocityTracker() }
-    val context = LocalContext.current
-    val flingVelocity =
-        remember(context) { ViewConfiguration.get(context).scaledMinimumFlingVelocity * 10 }
-    var isDrag by remember { mutableStateOf(false) }
-    var isDragStartedOnThumb by remember { mutableStateOf(false) }
-    val currentProgress by rememberUpdatedState(viewModel.progress)
-    Slider(
-        interactionSource = interactionSource,
-        value = viewModel.progress,
-        enabled = isEnabled,
-        onValueChange = { progress ->
-            if (!isDrag || isDragStartedOnThumb) {
-                viewModel.onScrubChange?.invoke(progress)
-            }
-        },
-        onValueChangeFinished = {
-            val velocity = velocityTracker.calculateVelocity().x
-            if (!isDrag || isDragStartedOnThumb) {
-                viewModel.onScrubFinished?.invoke(
-                    sliderDragDelta.value,
-                    abs(velocity) < abs(flingVelocity),
-                )
-            }
-
-            isDragStartedOnThumb = false
-            isDrag = false
-        },
-        colors = colors,
-        thumb = {
-            if (isEnabled) {
-                SeekBarThumb(interactionSource = interactionSource, colors = colors)
-            }
-        },
-        track = { sliderState ->
-            SeekBarTrack(
-                sliderState = sliderState,
-                isSquiggly = viewModel.isSquiggly,
-                colors = colors,
-                isThumbEnabled = isEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .semantics { stateDescription = viewModel.contentDescription }
-                .pointerInput(Unit) {
-                    // Track and report the drag delta to the view-model so it can decide whether to
-                    // accept the next onValueChangeFinished or reject it if the drag was overly
-                    // vertical.
-                    awaitPointerEventScope {
-                        var down: PointerInputChange? = null
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-
-                            event.changes.forEach { change ->
-                                // Feed the velocity tracker to detect flings
-                                velocityTracker.addPosition(change.uptimeMillis, change.position)
-                            }
-                            when (event.type) {
-                                PointerEventType.Press -> {
-                                    down = event.changes.last()
-                                    isDrag = false
-                                }
-
-                                PointerEventType.Move -> {
-                                    val change = event.changes.last()
-
-                                    if (change.id == down?.id) {
-                                        if (!isDrag) {
-                                            val thumbX = size.width * currentProgress
-                                            // Add some forgiveness to hit target by 20dp radius
-                                            isDragStartedOnThumb =
-                                                abs(down.position.x - thumbX) < 20.dp.toPx()
-                                        }
-                                        isDrag = true
-                                        if (isDragStartedOnThumb) {
-                                            sliderDragDelta.value =
-                                                change.position - down.position
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-    )
-}
-
 /** Renders the thumb of the seek bar. */
 @Composable
-private fun SeekBarThumb(
+internal fun SeekBarThumb(
     interactionSource: MutableInteractionSource,
     colors: SliderColors,
     modifier: Modifier = Modifier,
@@ -1684,7 +1419,7 @@ private fun SeekBarThumb(
  * the [waveSpeedDpPerSec] controls the speed by which it seems to "move" horizontally.
  */
 @Composable
-private fun SeekBarTrack(
+internal fun SeekBarTrack(
     sliderState: SliderState,
     isSquiggly: Boolean,
     colors: SliderColors,
@@ -1709,7 +1444,7 @@ private fun SeekBarTrack(
 }
 
 @Composable
-private fun SeekBarTrack(
+internal fun SeekBarTrack(
     @FloatRange(from = 0.0, to = 1.0) progress: () -> Float,
     isSquiggly: Boolean,
     colors: SliderColors,
@@ -1918,140 +1653,16 @@ private fun CardGuts(
     }
 }
 
-/**
- * The app icon + "App on" part of the three-row context header. The output device control
- * (`EdithOutputControl`) is rendered separately as a sibling [Media.Elements.OutputControl] element
- * so it can morph (slide) between the two-row and three-row headers.
- */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ContentScope.EdithContextHeader(
-    icon: Icon,
-    iconTint: Color,
-    appName: String,
-    deviceName: String,
-    modifier: Modifier = Modifier,
-    onAppIconClick: (() -> Unit)? = null,
-) {
-    val headerDescription =
-        stringResource(R.string.edith_media_context_header, appName, deviceName)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier =
-            modifier.clearAndSetSemantics { contentDescription = headerDescription },
-    ) {
-        Icon(
-            icon = icon,
-            tint = iconTint,
-            // Match the compressed (two-row) header icon: same size + circular clip, so the app
-            // icon doesn't jump when the card cross-fades between the two scenes.
-            modifier =
-                Modifier.size(24.dp)
-                    .clip(CircleShape)
-                    .thenIf(onAppIconClick != null) {
-                        Modifier.clickable(onClick = onAppIconClick!!)
-                    },
-        )
-        // Gap after the app icon.
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = appName,
-            color = Color.White,
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-        )
-        // Balanced seams around the "on" connector so it reads as one phrase without looking
-        // over-spaced (uniform spacedBy) or cramped.
-        Spacer(Modifier.width(4.dp))
-        Text(
-            text = stringResource(R.string.edith_media_on),
-            color = Color.White,
-            // The emphasized title-small family is baked at weight 600, so the connector uses the
-            // regular (400) Google Sans text/Flex face to read as a light connector.
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-        )
-    }
-}
-
 /** Resolves the display name for an output device chip (falls back to "This phone"). */
 @Composable
-private fun deviceNameFor(outputChip: MediaDeviceChipViewModel): String =
+internal fun deviceNameFor(outputChip: MediaDeviceChipViewModel): String =
     outputChip.text?.takeIf { it.isNotBlank() }?.toString()
         ?: stringResource(com.android.settingslib.R.string.media_transfer_this_device_name)
-
-/** The output device name (semibold, text only) + chevron, clickable to open the output switcher. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ContentScope.EdithOutputControl(
-    viewModel: MediaDeviceChipViewModel,
-    modifier: Modifier = Modifier,
-) {
-    val deviceName = deviceNameFor(viewModel)
-    val clickInteractionSource = remember { MutableInteractionSource() }
-    val expandable = remember { Expandable() }
-    Expandable(
-        expandable = expandable,
-        controller =
-            rememberExpandableController(
-                color = Color.Transparent,
-                // The controller shape drives the output-switcher dialog's expand/collapse morph;
-                // a rounded shape (matching DeviceChip) avoids closing into a rectangle.
-                shape = RoundedCornerShape(12.dp),
-            ),
-        useModifierBasedImplementation = true,
-        defaultMinSize = false,
-        modifier = Modifier.wrapContentSize(),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier =
-                modifier
-                    .clickable(
-                        interactionSource = clickInteractionSource,
-                        indication = null,
-                    ) {
-                        viewModel.onClick(expandable)
-                    }
-                    .clearAndSetSemantics { contentDescription = deviceName },
-        ) {
-            Text(
-                text = deviceName,
-                color = Color.White,
-                style = MaterialTheme.typography.titleSmallEmphasized,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-            )
-            // Trailing affordance: indicates the device name is clickable (opens the output
-            // switcher). Decorative — the row's content description is the device name.
-            Spacer(Modifier.width(2.dp))
-            MediaOutputChevron()
-        }
-    }
-}
-
-/** The trailing chevron of the output control (decorative; the parent provides the semantics). */
-@Composable
-private fun MediaOutputChevron(
-    modifier: Modifier = Modifier,
-    tint: Color = Color.White,
-    size: Dp = 18.dp,
-) {
-    Icon(
-        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-        contentDescription = null,
-        tint = tint,
-        modifier = modifier.size(size),
-    )
-}
 
 /** Renders the metadata labels of a track. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ContentScope.Metadata(
+internal fun ContentScope.Metadata(
     title: String,
     subtitle: String,
     isExplicit: Boolean,
@@ -2207,7 +1818,7 @@ private fun DeviceChip(
 
 /** Renders the primary action of media controls: the play/pause button. */
 @Composable
-private fun ContentScope.PlayPauseAction(
+internal fun ContentScope.PlayPauseAction(
     viewModel: MediaPlayPauseActionViewModel?,
     buttonColor: Color,
     iconColor: Color,
@@ -2289,7 +1900,7 @@ private fun ContentScope.PlayPauseAction(
  * between scenes inside a media card.
  */
 @Composable
-private fun ContentScope.SecondaryAction(
+internal fun ContentScope.SecondaryAction(
     viewModel: MediaSecondaryActionViewModel,
     modifier: Modifier = Modifier,
     resId: String = MediaRes.EMPTY_STRING,
@@ -2336,7 +1947,7 @@ private val FarSlotSize = 56.dp
 private val FarSlotIconSize = 26.dp
 
 @Composable
-private fun ContentScope.SecondarySlot(
+internal fun ContentScope.SecondarySlot(
     viewModel: MediaSecondaryActionViewModel?,
     elementIndex: Int,
 ) {
@@ -2413,7 +2024,7 @@ private fun SecondaryActionContent(
 }
 
 @Composable
-private fun TimestampText(text: String) {
+internal fun TimestampText(text: String) {
     // No horizontal padding: the timestamp sits flush against the scrubber row's 16dp inset so its
     // start aligns with the track title above; spacing to the seek bar comes from the row's
     // Arrangement.spacedBy.
@@ -2523,13 +2134,13 @@ data class MediaUiBehavior(
 )
 
 @Stable
-private interface AnimatedColorScheme {
+internal interface AnimatedColorScheme {
     val primary: Color
     val onPrimary: Color
     val background: Color
 }
 
-private object MediaRes {
+internal object MediaRes {
     const val EMPTY_STRING = ""
     const val BACKGROUND = "album_art"
     const val PLAY_PAUSE_BTN = "actionPlayPause"

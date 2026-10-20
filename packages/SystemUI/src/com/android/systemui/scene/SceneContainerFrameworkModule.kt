@@ -34,6 +34,7 @@ import com.android.systemui.scene.domain.startable.StatusBarStartable
 import com.android.systemui.scene.shared.model.Overlays
 import com.android.systemui.scene.shared.model.SceneContainerConfig
 import com.android.systemui.scene.shared.model.Scenes
+import com.android.systemui.qs.edith.EdithNotificationChipState
 import com.android.systemui.scene.ui.composable.SceneContainerTransitions
 import com.android.systemui.shade.shared.flag.DualShadeFlag
 import com.android.systemui.statusbar.quickactions.popups.StatusBarPopupChips
@@ -110,6 +111,7 @@ interface SceneContainerFrameworkModule {
         fun containerConfig(
             context: Context,
             lockPatternUtils: LockPatternUtils,
+            notificationChipState: EdithNotificationChipState,
         ): SceneContainerConfig {
             // Include the shade and quick settings scenes if:
             // 1. Dual Shade is disabled, or
@@ -163,7 +165,7 @@ interface SceneContainerFrameworkModule {
                             putAll(arrayOf(Scenes.Shade to 4, Scenes.QuickSettings to 5))
                         }
                     },
-                transitionsBuilder = SceneContainerTransitions(),
+                transitionsBuilder = SceneContainerTransitions(notificationChipState),
             )
         }
     }

@@ -224,6 +224,12 @@ private class ActiveNotificationsStoreBuilder(
             requestedPromotion = sbn.notification.isRequestPromotedOngoing,
             isScreenShareNotification = sbn.notification.isScreenShareNotification(),
             notifStyle = notifStyle(sbn.notification),
+            backgroundColor =
+                if (sbn.notification.isColorized()) {
+                    sbn.notification.color.takeIf { it != Notification.COLOR_DEFAULT }
+                } else {
+                    null
+                },
         )
     }
 }
@@ -260,6 +266,7 @@ private fun ActiveNotificationsStore.createOrReuseNotif(
     requestedPromotion: Boolean,
     isScreenShareNotification: Boolean,
     notifStyle: NotifStyle?,
+    backgroundColor: Int?,
 ): ActiveNotificationModel {
     return individuals[key]?.takeIf {
         it.isCurrent(
@@ -290,6 +297,7 @@ private fun ActiveNotificationsStore.createOrReuseNotif(
             requestedPromotion = requestedPromotion,
             isScreenShareNotification = isScreenShareNotification,
             style = notifStyle,
+            backgroundColor = backgroundColor,
         )
     }
         ?: ActiveNotificationModel(
@@ -351,6 +359,7 @@ private fun ActiveNotificationModel.isCurrent(
     requestedPromotion: Boolean,
     isScreenShareNotification: Boolean,
     style: NotifStyle?,
+    backgroundColor: Int?,
 ): Boolean {
     return when {
         key != this.key -> false
@@ -366,6 +375,7 @@ private fun ActiveNotificationModel.isCurrent(
         isPulsing != this.isPulsing -> false
         aodIcon != this.aodIcon -> false
         shelfIcon != this.shelfIcon -> false
+        backgroundColor != this.backgroundColor -> false
         statusBarIcon != this.statusBarIcon -> false
         statusBarChipIconView != this.statusBarChipIconView -> false
         uid != this.uid -> false

@@ -17,6 +17,7 @@
 package com.android.systemui.scene.ui.composable.transitions
 
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
 import com.android.compose.animation.scene.TransitionBuilder
 import com.android.compose.animation.scene.reveal.ContainerRevealHaptics
 import com.android.compose.animation.scene.reveal.verticalContainerReveal
@@ -33,6 +34,7 @@ fun TransitionBuilder.toNotificationsShadeTransition(
     enableSharedElements: Boolean,
     shadeExpansionMotion: VerticalExpandContainerSpec,
     revealHaptics: ContainerRevealHaptics,
+    chipOrigin: () -> Offset? = { null },
 ) {
     spec = tween(durationMillis = (DefaultDuration * durationScale).inWholeMilliseconds.toInt())
 
@@ -59,6 +61,13 @@ fun TransitionBuilder.toNotificationsShadeTransition(
     sharedElement(
         Notifications.Elements.HeadsUpNotificationPlaceholder,
         enabled = enableSharedElements,
+    )
+
+    // Open the shade out of the notification chip when it is on screen (the expanded player owns
+    // the screen then), instead of revealing it from the shelf's bottom-left edge.
+    transformation(
+        NotificationsShade.Elements.Panel,
+        ScaleFromPointUntilRelease(chipOrigin),
     )
 
     verticalContainerReveal(NotificationsShade.Elements.Panel, shadeExpansionMotion, revealHaptics)

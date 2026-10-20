@@ -109,6 +109,11 @@ data class ActiveNotificationModel(
     val isScreenShareNotification: Boolean,
     /** The visual style of the notification, containing additional data relevant to that style. */
     val style: NotifStyle?,
+    /**
+     * The notification's own background colour when it asks to be colorized (for example a red
+     * screen-recording notification), or `null` to use the surface colour.
+     */
+    val backgroundColor: Int? = null,
 ) : ActiveNotificationEntryModel() {
     companion object {
         private const val TAG = "ActiveNotificationEntryModel"

@@ -21,6 +21,7 @@ import com.android.systemui.scene.domain.resolver.HomeSceneFamilyResolverModule
 import com.android.systemui.scene.shared.model.Overlays
 import com.android.systemui.scene.shared.model.SceneContainerConfig
 import com.android.systemui.scene.shared.model.Scenes
+import com.android.systemui.qs.edith.EdithNotificationChipState
 import com.android.systemui.scene.ui.composable.SceneContainerTransitions
 import dagger.Module
 import dagger.Provides
@@ -44,7 +45,7 @@ object ShadelessSceneContainerFrameworkModule {
     // TODO(b/298229861): provide a version of SceneContainerStartable without shade and qs.
 
     @Provides
-    fun containerConfig(): SceneContainerConfig {
+    fun containerConfig(notificationChipState: EdithNotificationChipState): SceneContainerConfig {
         return SceneContainerConfig(
             // Note that this list is in z-order. The first one is the bottom-most and the last one
             // is top-most.
@@ -52,7 +53,7 @@ object ShadelessSceneContainerFrameworkModule {
             initialSceneKey = Scenes.Lockscreen,
             overlayKeys = listOf(Overlays.Bouncer),
             navigationDistances = mapOf(Scenes.Gone to 0, Scenes.Lockscreen to 0),
-            transitionsBuilder = SceneContainerTransitions(),
+            transitionsBuilder = SceneContainerTransitions(notificationChipState),
         )
     }
 }

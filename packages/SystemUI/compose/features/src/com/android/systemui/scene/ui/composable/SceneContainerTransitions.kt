@@ -57,6 +57,7 @@ import com.android.systemui.scene.ui.composable.transitions.shadeToAlwaysOnDispl
 import com.android.systemui.scene.ui.composable.transitions.shadeToQuickSettingsTransition
 import com.android.systemui.scene.ui.composable.transitions.sharedBouncerTransitions
 import com.android.systemui.scene.ui.composable.transitions.toBouncerTransition
+import com.android.systemui.qs.edith.EdithNotificationChipState
 import com.android.systemui.scene.ui.composable.transitions.toNotificationsShadeTransition
 import com.android.systemui.scene.ui.composable.transitions.toQuickActionsTransition
 import com.android.systemui.scene.ui.composable.transitions.toQuickSettingsShadeTransition
@@ -75,7 +76,9 @@ import com.android.systemui.shade.ui.composable.Shade
  *
  * Please keep the list sorted alphabetically.
  */
-class SceneContainerTransitions : SceneContainerTransitionsBuilder {
+class SceneContainerTransitions(
+    private val notificationChipState: EdithNotificationChipState,
+) : SceneContainerTransitionsBuilder {
     override fun build(
         shadeExpansionMotion: VerticalExpandContainerSpec,
         revealHaptics: ContainerRevealHaptics,
@@ -509,6 +512,7 @@ class SceneContainerTransitions : SceneContainerTransitionsBuilder {
                     enableSharedElements = true,
                     shadeExpansionMotion = shadeExpansionMotion,
                     revealHaptics = revealHaptics,
+                    chipOrigin = { notificationChipState.centre },
                 )
             }
             from(

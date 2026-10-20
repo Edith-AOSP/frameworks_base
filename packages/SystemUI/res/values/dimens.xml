@@ -868,23 +868,6 @@
     <dimen name="keyguard_split_shade_top_margin">68dp</dimen>
     <!-- The margin between the status view and the notifications on Keyguard.-->
     <dimen name="keyguard_status_view_bottom_margin">20dp</dimen>
-    <!-- Bottom margin under the smartspace cards on the lock screen. Smaller than
-         keyguard_status_view_bottom_margin so the media card sits tight under the smartspace. -->
-    <dimen name="edith_smartspace_cards_bottom_margin">0dp</dimen>
-    <!-- How far the smartspace cards are pulled up towards the small clock. The small clock
-         reserves more height than its visible glyphs need, so without this the card floats too
-         far below it. -->
-    <dimen name="edith_smartspace_cards_top_overlap">38dp</dimen>
-    <!-- How far the date/weather row is pulled up when it is laid out *below* the small clock. The
-         row is a short, centred view, so it already carries some slack of its own and needs less
-         than the cards. -->
-    <dimen name="edith_smartspace_dwa_row_overlap">28dp</dimen>
-    <!-- How far the smartspace cards are pulled up when the date/weather row is laid out below the
-         small clock. The card view is a full-height pager with the shorter card centred inside it,
-         so it carries slack above its first line that would otherwise read as a gap after the row.
-         14dp only removes that pager slack; the extra 10dp also eats into the slack above the
-         title inside the card, which is what actually reads as the card's top padding. -->
-    <dimen name="edith_smartspace_cards_below_dwa_overlap">24dp</dimen>
     <!-- Minimum margin between clock and status bar -->
     <dimen name="keyguard_clock_top_margin">18dp</dimen>
     <!-- The amount to shift the clocks during a small/large transition -->
@@ -2324,12 +2307,5 @@
     <dimen name="usb_device_dialog_button_background_radius_full">360dp</dimen>
     <!-- Usb Device Dialog values end -->
 
-    <!-- Edith expanded lock screen media player (square album art card). -->
-    <dimen name="edith_media_art_side_margin">16dp</dimen>
-    <dimen name="edith_media_art_corner_radius">24dp</dimen>
-    <!-- Height of the collapsed album-art banner (morphs to a square when expanded). -->
-    <dimen name="edith_media_art_banner_height">204dp</dimen>
-    <!-- Gap between the expanded square art and the media controls below it. -->
-    <dimen name="edith_media_art_controls_gap">10dp</dimen>
 
 </resources>
