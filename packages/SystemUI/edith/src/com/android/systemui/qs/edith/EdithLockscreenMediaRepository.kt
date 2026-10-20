@@ -23,6 +23,7 @@ import com.android.systemui.shared.settings.data.repository.SecureSettingsReposi
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 
@@ -34,6 +35,8 @@ import kotlinx.coroutines.flow.flowOn
  * - [EXPANDABLE_SETTING_NAME] (`edith_lockscreen_media_expandable`): `true` (default) = tapping
  *   the lock screen media card expands it into the large square-art view; `false` = the card body
  *   tap launches the playing app (stock behaviour).
+ * - [MOTION_ART_MODE_SETTING_NAME] (`edith_lockscreen_motion_art_mode`): how the expanded player
+ *   fetches dynamic (video) album art — always (default), only on unmetered networks, or never.
  */
 @SysUISingleton
 class EdithLockscreenMediaRepository
@@ -57,13 +60,27 @@ constructor(
             .flowOn(backgroundDispatcher)
 
     /**
-     * Whether the expanded lock screen media player may fetch dynamic (video) album art. Enabled by
-     * default: when a track has no motion art — or there is no network — the static cover is used
-     * instead.
+     * Mode for dynamic (video) album art on the expanded lock screen player, one of
+     * [MOTION_ART_ON], [MOTION_ART_WIFI_ONLY] or [MOTION_ART_OFF]. Defaults to on.
+     *
+     * Older builds stored the same choice as a boolean under [MOTION_ART_SETTING_NAME]; that value
+     * is still honoured until the mode key is written, because a legacy `true` (`1`) would otherwise
+     * read as [MOTION_ART_WIFI_ONLY].
      */
-    val isMotionArt: Flow<Boolean> =
-        secureSettingsRepository
-            .boolSetting(MOTION_ART_SETTING_NAME, defaultValue = true)
+    val motionArtMode: Flow<Int> =
+        combine(
+                secureSettingsRepository.stringSetting(MOTION_ART_MODE_SETTING_NAME, null),
+                secureSettingsRepository.stringSetting(MOTION_ART_SETTING_NAME, null),
+            ) { mode, legacy ->
+                mode?.toIntOrNull()?.takeIf { it in MOTION_ART_ON..MOTION_ART_OFF }
+                    ?: when (legacy?.lowercase()) {
+                        "1",
+                        "true" -> MOTION_ART_ON
+                        "0",
+                        "false" -> MOTION_ART_OFF
+                        else -> MOTION_ART_ON
+                    }
+            }
             .distinctUntilChanged()
             .flowOn(backgroundDispatcher)
 
@@ -81,10 +98,22 @@ constructor(
         const val EXPANDABLE_SETTING_NAME = "edith_lockscreen_media_expandable"
 
         /**
-         * [Settings.Secure] key for dynamic (video) album art on the lock screen media player.
-         * Referenced as a string (rather than a framework constant) so this can ship as a
+         * [Settings.Secure] key for the mode of dynamic (video) album art on the lock screen media
+         * player. Referenced as a string (rather than a framework constant) so this can ship as a
          * SystemUI-only change.
          */
+        const val MOTION_ART_MODE_SETTING_NAME = "edith_lockscreen_motion_art_mode"
+
+        /** [MOTION_ART_MODE_SETTING_NAME] fallback used by builds that stored a boolean. */
         const val MOTION_ART_SETTING_NAME = "edith_lockscreen_motion_art"
+
+        /** Fetch and play motion art on any network. */
+        const val MOTION_ART_ON = 0
+
+        /** Fetch motion art only on unmetered networks; cached loops still play. */
+        const val MOTION_ART_WIFI_ONLY = 1
+
+        /** Never fetch or play motion art; the static cover is used. */
+        const val MOTION_ART_OFF = 2
     }
 }

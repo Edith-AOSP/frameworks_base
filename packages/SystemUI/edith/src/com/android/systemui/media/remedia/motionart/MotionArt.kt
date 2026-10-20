@@ -35,9 +35,16 @@ import org.json.JSONObject
  * expanded lock screen media player.
  *
  * The video is resolved from the public iTunes search + album page, so no account, token or extra
- * app is involved: search by artist/title, take the album page, pull the `motionDetail*` HLS master
- * out of its structured data, pick the AVC variant closest to the width we draw at, and cache the
- * init segment (the whole loop lives in the byterange-less `#EXT-X-MAP`) as a local MP4.
+ * app is involved: search by artist/title, walk the matching album pages (a song is often listed as
+ * both a single and an album track, and only one of them may be animated), pull the `motionDetail*`
+ * HLS master out of the page's structured data, pick the AVC variant closest to the width we draw
+ * at, and cache the file the playlist's `#EXT-X-MAP` points at as a local MP4. The loop is that
+ * whole file — the segments after the map are byteranges into it — so the `BYTERANGE` on the map is
+ * not used, and the media playlist is only read for the URI.
+ *
+ * What is cached is the segment with its timeline moved to zero by [MotionArtTimeline], so the
+ * player loops a file whose first sample sits at zero rather than wherever the album's playlist
+ * happened to start. The samples themselves are left untouched.
  *
  * Everything is best-effort and cached on disk: [find] returns `null` when the track has no motion
  * art, the network is down or anything is unexpected, and the caller just keeps the static cover.
@@ -56,6 +63,12 @@ object MotionArt {
     private const val MAX_BYTES = 24L * 1024 * 1024
     private const val MAX_CACHED = 40
 
+    /** How many matching album pages to try before giving up on a track. */
+    private const val MAX_ALBUM_CANDIDATES = 4
+
+    /** Bumped when the cached file changes shape, so older files are not played as they are. */
+    private const val CACHE_VERSION = 3
+
     /** Remembered album id (or [NONE]) per query, so a miss is not re-searched every track change. */
     private val albums = ConcurrentHashMap<String, String>()
     private const val NONE = ""
@@ -63,38 +76,40 @@ object MotionArt {
     suspend fun find(context: Context, artist: String, title: String, kind: Kind): File? =
         withContext(Dispatchers.IO) {
             if (artist.isBlank() || title.isBlank()) return@withContext null
-            val dir = File(context.createDeviceProtectedStorageContext().cacheDir, "motion_art")
+            val dir = cacheDir(context)
             val key = "$artist\u0000$title\u0000$kind"
             val known = albums[key]
             if (known != null) {
                 return@withContext known
                     .takeIf { it != NONE }
-                    ?.let { File(dir, "$it${kind.suffix}.mp4") }
+                    ?.let { cacheFile(dir, it, kind) }
                     ?.takeIf { it.exists() }
             }
             try {
-                val album = findAlbum(artist, title)
-                if (album == null) {
-                    albums[key] = NONE
-                    return@withContext null
+                val candidates = findAlbums(artist, title)
+                for ((id, page) in candidates) {
+                    val cached = cacheFile(dir, id, kind)
+                    if (!cached.exists() && !download(page, kind, cached)) continue
+                    albums[key] = id
+                    cached.setLastModified(System.currentTimeMillis())
+                    trim(dir)
+                    return@withContext cached
                 }
-                val (id, page) = album
-                val cached = File(dir, "$id${kind.suffix}.mp4")
-                if (!cached.exists() && !download(page, kind, cached)) {
-                    albums[key] = NONE
-                    return@withContext null
-                }
-                albums[key] = id
-                cached.setLastModified(System.currentTimeMillis())
-                trim(dir)
-                cached
+                albums[key] = NONE
+                return@withContext null
             } catch (e: IOException) {
                 Log.w(TAG, "Motion art lookup failed: $e")
                 null
             }
         }
 
-    private fun findAlbum(artist: String, title: String): Pair<String, String>? {
+    /**
+     * Albums matching [artist] and [title], in search order.
+     *
+     * A song is often listed more than once — its single and the album it appears on — and only one
+     * of them may carry motion art, so the caller tries each page instead of trusting the first hit.
+     */
+    private fun findAlbums(artist: String, title: String): List<Pair<String, String>> {
         val country = Locale.getDefault().country.lowercase().ifEmpty { "us" }
         val term = URLEncoder.encode("$artist $title", "UTF-8")
         val json =
@@ -104,9 +119,11 @@ object MotionArt {
                         "&country=$country"
                 )
             )
-        val results = json.optJSONArray("results") ?: return null
+        val results = json.optJSONArray("results") ?: return emptyList()
         val wantedArtist = normalise(artist)
         val wantedTitle = normalise(title)
+        val seen = HashSet<Long>()
+        val candidates = ArrayList<Pair<String, String>>()
         for (i in 0 until results.length()) {
             val song = results.getJSONObject(i)
             val songArtist = normalise(song.optString("artistName"))
@@ -116,10 +133,13 @@ object MotionArt {
             val titleMatches = songTitle.startsWith(wantedTitle) || wantedTitle.startsWith(songTitle)
             if (!artistMatches || !titleMatches) continue
             val id = song.optLong("collectionId").takeIf { it > 0 } ?: continue
+            if (!seen.add(id)) continue
             val page = song.optString("collectionViewUrl").substringBefore('?')
-            if (page.isNotEmpty()) return id.toString() to page
+            if (page.isEmpty()) continue
+            candidates += id.toString() to page
+            if (candidates.size == MAX_ALBUM_CANDIDATES) break
         }
-        return null
+        return candidates
     }
 
     private fun normalise(text: String) =
@@ -167,12 +187,52 @@ object MotionArt {
         } finally {
             connection.disconnect()
         }
-        return partial.length() in 1..MAX_BYTES && partial.renameTo(target)
+        if (partial.length() !in 1..MAX_BYTES) {
+            partial.delete()
+            return false
+        }
+        val rewritten = File(target.path + ".rewrite")
+        if (MotionArtTimeline.rewrite(partial, rewritten) && rewritten.renameTo(target)) {
+            partial.delete()
+            return true
+        }
+        rewritten.delete()
+        // A segment this cannot parse may still play as it is, so it is kept rather than dropping
+        // the art for this track.
+        return partial.renameTo(target)
     }
 
+    private fun cacheFile(dir: File, albumId: String, kind: Kind) =
+        File(dir, "$albumId${kind.suffix}.v$CACHE_VERSION.mp4")
+
     private fun trim(dir: File) {
-        val files = dir.listFiles { file -> file.name.endsWith(".mp4") } ?: return
+        val suffix = ".v$CACHE_VERSION.mp4"
+        dir.listFiles { file -> file.name.endsWith(".mp4") }.orEmpty().forEach { file ->
+            if (!file.name.endsWith(suffix)) file.delete()
+        }
+        val files = dir.listFiles { file -> file.name.endsWith(suffix) } ?: return
         files.sortedByDescending { it.lastModified() }.drop(MAX_CACHED).forEach { it.delete() }
+    }
+
+    /** Directory holding the cached loops. Shared with the cache provider used by Settings. */
+    fun cacheDir(context: Context): File =
+        File(context.createDeviceProtectedStorageContext().cacheDir, "motion_art")
+
+    /** Total size of the cache, including any download that is still in progress. */
+    fun cacheBytes(context: Context): Long =
+        cacheDir(context).listFiles()?.sumOf { it.length() } ?: 0L
+
+    /** Number of loops currently cached. */
+    fun cacheFiles(context: Context): Int =
+        cacheDir(context).listFiles()?.count { it.name.endsWith(".mp4") } ?: 0
+
+    /**
+     * Deletes every cached loop. The remembered albums are dropped with them: their files are gone,
+     * so a later lookup has to search and download again instead of resolving to a missing file.
+     */
+    fun clearCache(context: Context) {
+        cacheDir(context).listFiles()?.forEach { it.delete() }
+        albums.clear()
     }
 
     private fun open(url: String): HttpURLConnection =

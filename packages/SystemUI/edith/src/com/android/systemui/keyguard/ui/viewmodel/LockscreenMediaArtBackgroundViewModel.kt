@@ -21,6 +21,7 @@ import com.android.systemui.deviceentry.domain.interactor.DeviceEntryInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.lifecycle.HydratedActivatable
 import com.android.systemui.media.remedia.data.repository.MediaRepository
+import com.android.systemui.media.remedia.motionart.MotionArtNetwork
 import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.qs.edith.EdithLockscreenMediaRepository
 import com.android.systemui.wallpapers.data.repository.WallpaperRepository
@@ -39,6 +40,7 @@ constructor(
     private val mediaRepository: MediaRepository,
     private val expansionInteractor: EdithLockscreenMediaExpansionInteractor,
     lockscreenMediaRepository: EdithLockscreenMediaRepository,
+    motionArtNetwork: MotionArtNetwork,
     keyguardInteractor: KeyguardInteractor,
     deviceEntryInteractor: DeviceEntryInteractor,
     wallpaperRepository: WallpaperRepository,
@@ -88,11 +90,27 @@ constructor(
         get() = progress > 0f
 
     /** Whether dynamic (video) album art may be fetched and played. */
-    private val motionArtEnabled: Boolean by
-        lockscreenMediaRepository.isMotionArt.hydratedStateOf(initialValue = false)
+    private val motionArtMode: Int by
+        lockscreenMediaRepository.motionArtMode.hydratedStateOf(
+            initialValue = EdithLockscreenMediaRepository.MOTION_ART_OFF
+        )
 
+    /** Whether the default network is unmetered; only consulted in "Wi-Fi only" mode. */
+    private val unmetered: Boolean by
+        motionArtNetwork.isUnmetered.hydratedStateOf(initialValue = false)
+
+    /** Art mode, for the backdrop to tell "off" apart from "no art on this album". */
     val isMotionArtEnabled: Boolean
-        get() = motionArtEnabled
+        get() = motionArtMode != EdithLockscreenMediaRepository.MOTION_ART_OFF
+
+    /** Whether a loop may be downloaded right now (cached art plays regardless of this). */
+    val canDownloadMotionArt: Boolean
+        get() =
+            when (motionArtMode) {
+                EdithLockscreenMediaRepository.MOTION_ART_ON -> true
+                EdithLockscreenMediaRepository.MOTION_ART_WIFI_ONLY -> unmetered
+                else -> false
+            }
 
     /** Artist and title of the shown session, used to look up its motion art. */
     val track: Pair<String, String>?

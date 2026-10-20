@@ -478,6 +478,13 @@
             android:exported="true"
             />
 
+        <!-- Reports and clears the motion art cache for the lock screen settings. -->
+        <provider
+            android:name=".media.remedia.motionart.MotionArtCacheProvider"
+            android:authorities="com.android.systemui.motionart"
+            android:exported="true"
+            android:permission="android.permission.STATUS_BAR_SERVICE" />
+
         <!-- Service for dumping extremely verbose content during a bug report -->
         <service android:name=".dump.SystemUIAuxiliaryDumpService"
              android:exported="false"

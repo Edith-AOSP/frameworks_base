@@ -103,13 +103,30 @@ fun LockscreenMediaArtBackground(
     // one is handed to the expanded player, which plays it inside the art square.
     val track = viewModel.track
     val expanded = viewModel.isExpanded
+    val motionArtEnabled = viewModel.isMotionArtEnabled
+    val canDownload = viewModel.canDownloadMotionArt
     var tallArt by remember { mutableStateOf<File?>(null) }
+    // The track the current pass belongs to. A network change re-runs the effect, and without this
+    // it would throw away art that is still valid for the same track.
+    var requestedTrack by remember { mutableStateOf<Pair<String, String>?>(null) }
     val context = LocalContext.current
-    LaunchedEffect(viewModel.isMotionArtEnabled, track, expanded) {
-        tallArt = null
-        viewModel.setSquareMotionArt(null)
-        if (!viewModel.isMotionArtEnabled || !expanded || track == null) return@LaunchedEffect
-        val (artist, title) = track
+    LaunchedEffect(motionArtEnabled, track, expanded, canDownload) {
+        val current = track
+        if (!expanded || current == null || !motionArtEnabled) {
+            tallArt = null
+            viewModel.setSquareMotionArt(null)
+            requestedTrack = null
+            return@LaunchedEffect
+        }
+        if (requestedTrack != current) {
+            tallArt = null
+            viewModel.setSquareMotionArt(null)
+            requestedTrack = current
+        }
+        // "Wi-Fi only" holds a not-yet-resolved track until an unmetered network appears; cached art
+        // is never dropped just because the network changed.
+        if (!canDownload || tallArt != null) return@LaunchedEffect
+        val (artist, title) = current
         tallArt = MotionArt.find(context, artist, title, MotionArt.Kind.TALL)
         viewModel.setSquareMotionArt(
             MotionArt.find(context, artist, title, MotionArt.Kind.SQUARE)
