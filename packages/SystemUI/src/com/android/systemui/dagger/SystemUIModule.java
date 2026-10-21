@@ -96,7 +96,7 @@ import com.android.systemui.log.table.impl.TableLogBufferModule;
 import com.android.systemui.lowlight.dagger.LowLightModule;
 import com.android.systemui.lowlightclock.dagger.LowLightClockModule;
 import com.android.systemui.media.NotificationMediaManager;
-import com.android.systemui.media.remedia.motionart.MotionArtSourceModule;
+import com.android.systemui.edith.dagger.EdithModule;
 import com.android.systemui.mediaprojection.MediaProjectionModule;
 import com.android.systemui.mediaprojection.appselector.MediaProjectionActivitiesModule;
 import com.android.systemui.mediaprojection.taskswitcher.MediaProjectionTaskSwitcherModule;
@@ -247,7 +247,7 @@ import javax.inject.Named;
         CameraProtectionModule.class,
         ClipboardOverlayModule.class,
         ClockRegistryModule.class,
-        MotionArtSourceModule.class,
+        EdithModule.class,
         CommunalModule.class,
         CommonDataLayerModule.class,
         ComposeModule.class,
