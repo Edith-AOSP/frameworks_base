@@ -44,12 +44,10 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.android.systemui.common.shared.model.Icon
 import com.android.systemui.common.shared.model.asImageBitmap
 import com.android.systemui.keyguard.ui.viewmodel.LockscreenMediaArtBackgroundViewModel
-import com.android.systemui.media.remedia.motionart.MotionArt
 import com.android.systemui.media.remedia.motionart.FadingMotionArtVideo
 import java.io.File
 import java.util.concurrent.Executor
@@ -109,7 +107,6 @@ fun LockscreenMediaArtBackground(
     // The track the current pass belongs to. A network change re-runs the effect, and without this
     // it would throw away art that is still valid for the same track.
     var requestedTrack by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val context = LocalContext.current
     LaunchedEffect(motionArtEnabled, track, expanded, canDownload) {
         val current = track
         if (!expanded || current == null || !motionArtEnabled) {
@@ -126,11 +123,8 @@ fun LockscreenMediaArtBackground(
         // "Wi-Fi only" holds a not-yet-resolved track until an unmetered network appears; cached art
         // is never dropped just because the network changed.
         if (!canDownload || tallArt != null) return@LaunchedEffect
-        val (artist, title) = current
-        tallArt = MotionArt.find(context, artist, title, MotionArt.Kind.TALL)
-        viewModel.setSquareMotionArt(
-            MotionArt.find(context, artist, title, MotionArt.Kind.SQUARE)
-        )
+        tallArt = viewModel.findMotionArt(tall = true)
+        viewModel.setSquareMotionArt(viewModel.findMotionArt(tall = false))
     }
 
     // Opaque base so the wallpaper never shows through while there is no art at all; the whole

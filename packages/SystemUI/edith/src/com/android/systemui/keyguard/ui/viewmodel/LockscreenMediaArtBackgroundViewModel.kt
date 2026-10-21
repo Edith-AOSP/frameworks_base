@@ -21,7 +21,10 @@ import com.android.systemui.deviceentry.domain.interactor.DeviceEntryInteractor
 import com.android.systemui.keyguard.domain.interactor.KeyguardInteractor
 import com.android.systemui.lifecycle.HydratedActivatable
 import com.android.systemui.media.remedia.data.repository.MediaRepository
+import android.content.Context
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.media.remedia.motionart.MotionArtNetwork
+import com.android.systemui.media.remedia.motionart.MotionArtSource
 import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.qs.edith.EdithLockscreenMediaRepository
 import com.android.systemui.wallpapers.data.repository.WallpaperRepository
@@ -41,6 +44,8 @@ constructor(
     private val expansionInteractor: EdithLockscreenMediaExpansionInteractor,
     lockscreenMediaRepository: EdithLockscreenMediaRepository,
     motionArtNetwork: MotionArtNetwork,
+    private val motionArtSources: Set<@JvmSuppressWildcards MotionArtSource>,
+    @Application private val appContext: Context,
     keyguardInteractor: KeyguardInteractor,
     deviceEntryInteractor: DeviceEntryInteractor,
     wallpaperRepository: WallpaperRepository,
@@ -121,6 +126,19 @@ constructor(
             val shown = media[index]
             return shown.subtitle to shown.title
         }
+
+    /**
+     * Resolves the loop for the shown track through the highest-priority [MotionArtSource]. The
+     * default implementation is the in-tree one; a build that ships its own (the Edith SystemUI APK)
+     * replaces it by binding a source with a higher priority.
+     *
+     * @param tall `true` for the backdrop shape, `false` for the square one the player draws.
+     */
+    suspend fun findMotionArt(tall: Boolean): File? {
+        val (artist, title) = track ?: return null
+        val source = motionArtSources.maxByOrNull { it.priority } ?: return null
+        return source.find(appContext, artist, title, tall)
+    }
 
     /** Hands the resolved square motion art to the expanded player (it draws it in the art square). */
     fun setSquareMotionArt(file: File?) {
