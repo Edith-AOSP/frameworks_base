@@ -29,13 +29,17 @@ import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.res.R
 import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.statusbar.chips.mediaprojection.domain.model.MediaProjectionStopDialogModel
+import com.android.systemui.statusbar.edith.EdithStatusBarNotificationBinder
+import com.android.systemui.statusbar.edith.EdithStatusBarNotificationStyleRepository
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState.AnimatingIn
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState.AnimatingOut
 import com.android.systemui.statusbar.events.shared.model.SystemEventAnimationState.RunningChipAnim
+import com.android.systemui.statusbar.phone.PhoneStatusBarView
 import com.android.systemui.statusbar.pipeline.shared.ui.model.VisibilityModel
 import com.android.systemui.statusbar.pipeline.shared.ui.viewmodel.HomeStatusBarViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -61,7 +65,12 @@ interface HomeStatusBarViewBinder {
 }
 
 @PerDisplaySingleton
-class HomeStatusBarViewBinderImpl @Inject constructor() : HomeStatusBarViewBinder {
+class HomeStatusBarViewBinderImpl
+@Inject
+constructor(
+    private val edithNotificationBinder: EdithStatusBarNotificationBinder,
+    private val edithNotificationStyle: EdithStatusBarNotificationStyleRepository,
+) : HomeStatusBarViewBinder {
     override fun bind(
         displayId: Int,
         view: View,
@@ -80,6 +89,8 @@ class HomeStatusBarViewBinderImpl @Inject constructor() : HomeStatusBarViewBinde
         systemInfoView.hideInitially()
         clockView.hideInitially()
         notificationIconsArea.hideInitially()
+
+        edithNotificationBinder.bind(view as PhoneStatusBarView, viewModel)
 
         view.repeatWhenAttached {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
@@ -146,9 +157,17 @@ class HomeStatusBarViewBinderImpl @Inject constructor() : HomeStatusBarViewBinde
                 }
 
                 launch {
-                    viewModel.isNotificationIconContainerVisible.collect {
-                        notificationIconsArea.adjustVisibility(it)
-                    }
+                    combine(
+                            viewModel.isNotificationIconContainerVisible,
+                            edithNotificationStyle.mode,
+                        ) { visible, mode ->
+                            if (mode == EdithStatusBarNotificationStyleRepository.MODE_ICONS) {
+                                visible
+                            } else {
+                                VisibilityModel(View.GONE, shouldAnimateChange = true)
+                            }
+                        }
+                        .collect { notificationIconsArea.adjustVisibility(it) }
                 }
 
                 launch {
