@@ -261,7 +261,10 @@ internal fun ContentScope.EdithContextHeader(
             style = MaterialTheme.typography.titleSmallEmphasized,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
-            overflow = TextOverflow.Clip,
+            overflow = TextOverflow.Ellipsis,
+            // The context header shares the row with the device name. Let the app name shrink
+            // (with an ellipsis) instead of pushing the output control off the card.
+            modifier = Modifier.weight(1f, fill = false),
         )
         // Balanced seams around the "on" connector so it reads as one phrase without looking
         // over-spaced (uniform spacedBy) or cramped.
@@ -319,7 +322,9 @@ internal fun ContentScope.EdithOutputControl(
                 style = MaterialTheme.typography.titleSmallEmphasized,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
-                overflow = TextOverflow.Clip,
+                overflow = TextOverflow.Ellipsis,
+                // Reserve the chevron: the name may ellipsize, but the affordance stays visible.
+                modifier = Modifier.weight(1f, fill = false),
             )
             // Trailing affordance: indicates the device name is clickable (opens the output
             // switcher). Decorative — the row's content description is the device name.
