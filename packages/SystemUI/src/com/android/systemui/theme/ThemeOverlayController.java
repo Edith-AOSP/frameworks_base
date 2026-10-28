@@ -158,6 +158,10 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
     protected int mMainWallpaperColor = Color.TRANSPARENT;
     // UI contrast as reported by UiModeManager
     private double mContrast = 0.0;
+    // Relative palette intensity adjustments, in percent.
+    private int mAccentSaturation = 100;
+    private int mBackgroundSaturation = 100;
+    private int mBackgroundLightness = 100;
     // Theme variant: Vibrant, Tonal, Expressive, etc
     @VisibleForTesting
     @ThemeStyle.Type
@@ -707,8 +711,11 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
     }
 
     private void createOverlays(int color) {
-        mDarkColorScheme = new ColorScheme(color, true /* isDark */, mThemeStyle, mContrast);
-        mLightColorScheme = new ColorScheme(color, false /* isDark */, mThemeStyle, mContrast);
+        fetchColorTuningFromSetting();
+        mDarkColorScheme = new ColorScheme(color, true /* isDark */, mThemeStyle, mContrast,
+                mAccentSaturation, mBackgroundSaturation, mBackgroundLightness);
+        mLightColorScheme = new ColorScheme(color, false /* isDark */, mThemeStyle, mContrast,
+                mAccentSaturation, mBackgroundSaturation, mBackgroundLightness);
         mColorScheme = isNightMode() ? mDarkColorScheme : mLightColorScheme;
 
         mAccentOverlay = newFabricatedOverlay("accent");
@@ -888,6 +895,34 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
         mThemeManager.applyCurrentUserOverlays(categoryToPackage, fOverlays, currentUser,
                 managedProfiles, onCompleteCallback);
 
+    }
+
+    private void fetchColorTuningFromSetting() {
+        mAccentSaturation = 100;
+        mBackgroundSaturation = 100;
+        mBackgroundLightness = 100;
+        final String overlayPackageJson = mSecureSettings.getStringForUser(
+                Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
+                mUserTracker.getUserId());
+        if (TextUtils.isEmpty(overlayPackageJson)) {
+            return;
+        }
+        try {
+            JSONObject object = new JSONObject(overlayPackageJson);
+            mAccentSaturation = clampTuning(
+                    object.optInt("android.theme.customization.accent_saturation", 100));
+            mBackgroundSaturation = clampTuning(
+                    object.optInt("android.theme.customization.background_saturation", 100));
+            mBackgroundLightness = clampTuning(
+                    object.optInt("android.theme.customization.background_lightness", 100));
+        } catch (JSONException e) {
+            Log.i(TAG, "Failed to parse color tuning from THEME_CUSTOMIZATION_OVERLAY_PACKAGES.",
+                    e);
+        }
+    }
+
+    private static int clampTuning(int value) {
+        return Math.max(0, Math.min(200, value));
     }
 
     @ThemeStyle.Type
