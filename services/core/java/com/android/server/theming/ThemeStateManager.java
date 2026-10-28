@@ -201,6 +201,24 @@ public class ThemeStateManager {
     }
 
     /**
+     * Called when the palette intensity adjustments change.
+     *
+     * @param userId      The ID of the user updating the theme.
+     * @param colorTuning The new adjustments.
+     */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void onColorTuningChange(int userId, ColorTuning colorTuning) {
+        ThemeStatePair statePair = getState(userId);
+
+        if (statePair.areUpdatesDeferredOnLock()) {
+            Slog.d(TAG, "User explicitly changed color tuning, clearing deferral.");
+            statePair.setDeferUpdatesOnLock(false);
+        }
+        statePair.applyColorTuning(colorTuning);
+        reevaluateSystemTheme();
+    }
+
+    /**
      * Called when the setup process is completed for a user.
      *
      * @param userId The ID of the user who completed setup.
@@ -253,12 +271,19 @@ public class ThemeStateManager {
      * @param userId     The ID of the user loading.
      * @param isSetup    {@code true} if the user has completed setup, {@code false} otherwise.
      * @param seedColors The initial seed colors for the user's theme.
-     * @param contrast   The initial contrast value for the user's theme.
-     * @param style      The initial style for the user's theme.
+     * @param contrast    The initial contrast value for the user's theme.
+     * @param style       The initial style for the user's theme.
+     * @param colorTuning The initial palette intensity adjustments.
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public void onUserLoad(int userId, boolean isSetup, List<Integer> seedColors, float contrast,
             @ThemeStyle.Type Integer style) {
+        onUserLoad(userId, isSetup, seedColors, contrast, style, ColorTuning.DEFAULT);
+    }
+
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void onUserLoad(int userId, boolean isSetup, List<Integer> seedColors, float contrast,
+            @ThemeStyle.Type Integer style, ColorTuning colorTuning) {
         synchronized (mLock) {
             Integer parentId = mEnvironment.parentOf(userId);
 
@@ -279,7 +304,7 @@ public class ThemeStateManager {
             } else {
                 // CASE 3: userId is a new user
                 ThemeStatePair newState = new ThemeStatePair(userId, isSetup, seedColors, contrast,
-                        style, mEnvironment);
+                        style, colorTuning, mEnvironment);
                 int[] profiles = Objects.requireNonNullElse(
                         mUserManager.getProfileIds(userId, false), new int[0]);
 
@@ -300,14 +325,21 @@ public class ThemeStateManager {
      * @param userHandle The {@link UserHandle} of the user starting.
      * @param isSetup    {@code true} if the user has completed setup, {@code false} otherwise.
      * @param seedColors The initial seed colors for the user's theme.
-     * @param contrast   The initial contrast value for the user's theme.
-     * @param style      The initial style for the user's theme.
+     * @param contrast    The initial contrast value for the user's theme.
+     * @param style       The initial style for the user's theme.
+     * @param colorTuning The initial palette intensity adjustments.
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public void onUserStart(UserHandle userHandle, boolean isSetup, List<Integer> seedColors,
             float contrast, @ThemeStyle.Type Integer style) {
+        onUserStart(userHandle, isSetup, seedColors, contrast, style, ColorTuning.DEFAULT);
+    }
+
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void onUserStart(UserHandle userHandle, boolean isSetup, List<Integer> seedColors,
+            float contrast, @ThemeStyle.Type Integer style, ColorTuning colorTuning) {
         // Ensure state is loaded. This is idempotent.
-        onUserLoad(userHandle.getIdentifier(), isSetup, seedColors, contrast, style);
+        onUserLoad(userHandle.getIdentifier(), isSetup, seedColors, contrast, style, colorTuning);
         reevaluateSystemTheme();
     }
 

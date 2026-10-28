@@ -86,6 +86,7 @@ public class ThemeStatePair {
      * @param seedColors  The initial seed colors for the user's theme.
      * @param contrast    The initial contrast value for the user's theme.
      * @param style       The initial style for the user's theme.
+     * @param colorTuning The initial palette intensity adjustments.
      * @param environment The system-wide theme environment.
      */
     @SuppressLint("WrongConstant")
@@ -95,21 +96,36 @@ public class ThemeStatePair {
             List<Integer> seedColors,
             float contrast,
             @ThemeStyle.Type Integer style,
+            ColorTuning colorTuning,
             ThemeEnvironment environment) {
 
         this.userId = userId;
         this.mEnvironment = environment;
 
         ThemeState initialState = new ThemeState(userId, isSetup, seedColors, contrast, style,
-                Collections.unmodifiableSet(new HashSet<>()), 0);
+                colorTuning, Collections.unmodifiableSet(new HashSet<>()), 0);
 
         mDarkScheme = new ColorScheme(seedColors, true, style, contrast,
-                environment.getConfig().specVersion(), environment.getConfig().platform());
+                environment.getConfig().specVersion(), environment.getConfig().platform(),
+                colorTuning.accentSaturation(), colorTuning.backgroundSaturation(),
+                colorTuning.backgroundLightness());
         mLightScheme = new ColorScheme(seedColors, false, style, contrast,
-                environment.getConfig().specVersion(), environment.getConfig().platform());
+                environment.getConfig().specVersion(), environment.getConfig().platform(),
+                colorTuning.accentSaturation(), colorTuning.backgroundSaturation(),
+                colorTuning.backgroundLightness());
 
         mPending = initialState;
         mCurrent = initialState;
+    }
+
+    ThemeStatePair(
+            int userId,
+            boolean isSetup,
+            List<Integer> seedColors,
+            float contrast,
+            @ThemeStyle.Type Integer style,
+            ThemeEnvironment environment) {
+        this(userId, isSetup, seedColors, contrast, style, ColorTuning.DEFAULT, environment);
     }
 
     /**
@@ -153,6 +169,17 @@ public class ThemeStatePair {
     void applyContrast(float newContrast) {
         synchronized (mLock) {
             mPending = mPending.withContrast(newContrast);
+        }
+    }
+
+    /**
+     * Applies new palette intensity adjustments to the pending theme state.
+     *
+     * @param newColorTuning The new adjustments.
+     */
+    void applyColorTuning(ColorTuning newColorTuning) {
+        synchronized (mLock) {
+            mPending = mPending.withColorTuning(newColorTuning);
         }
     }
 
@@ -325,11 +352,17 @@ public class ThemeStatePair {
         ColorScheme newDarkScheme = new ColorScheme(stateToCommit.seedColors(), true,
                 stateToCommit.style(), stateToCommit.contrast(),
                 mEnvironment.getConfig().specVersion(),
-                mEnvironment.getConfig().platform());
+                mEnvironment.getConfig().platform(),
+                stateToCommit.colorTuning().accentSaturation(),
+                stateToCommit.colorTuning().backgroundSaturation(),
+                stateToCommit.colorTuning().backgroundLightness());
         ColorScheme newLightScheme = new ColorScheme(stateToCommit.seedColors(), false,
                 stateToCommit.style(), stateToCommit.contrast(),
                 mEnvironment.getConfig().specVersion(),
-                mEnvironment.getConfig().platform());
+                mEnvironment.getConfig().platform(),
+                stateToCommit.colorTuning().accentSaturation(),
+                stateToCommit.colorTuning().backgroundSaturation(),
+                stateToCommit.colorTuning().backgroundLightness());
 
         synchronized (mLock) {
             // If the pending state has changed while we were calculating, our calculated schemes

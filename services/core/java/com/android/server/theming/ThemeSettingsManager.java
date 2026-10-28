@@ -66,7 +66,7 @@ public class ThemeSettingsManager {
     private static final String TAG = "ThemeSettingsManager";
 
     static final String TIMESTAMP = "_applied_timestamp";
-    private static final String KEY_PREFIX = "android.theme.customization.";
+    static final String KEY_PREFIX = "android.theme.customization.";
     static final String OVERLAY_CATEGORY_ACCENT_COLOR = KEY_PREFIX + "accent_color";
     static final String OVERLAY_CATEGORY_SYSTEM_PALETTE = KEY_PREFIX + "system_palette";
     static final String OVERLAY_SEED_COLOR_LIST = KEY_PREFIX + "seed_color_list";
@@ -188,9 +188,24 @@ public class ThemeSettingsManager {
         }
     }
 
+    /**
+     * Reads the relative palette intensity adjustments stored alongside the theme settings.
+     *
+     * <p>The values are written by the theme picker into the same secure setting as the seed and
+     * style. Unknown JSON keys survive {@link #toJson}, so the theme service keeps them when it
+     * rewrites the settings after a wallpaper change.
+     */
+    @NonNull
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public ColorTuning getColorTuning(@UserIdInt int userId,
+            @NonNull ContentResolver contentResolver) {
+        final String jsonString = Settings.Secure.getStringForUser(contentResolver,
+                Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, userId);
+        return ColorTuning.fromJson(jsonString);
+    }
+
     @Nullable
-    private ThemeSettings readFromDisk(@UserIdInt int userId, ContentResolver contentResolver) {
-        try {
+    private ThemeSettings readFromDisk(@UserIdInt int userId, ContentResolver contentResolver) {        try {
             final String jsonString = Settings.Secure.getStringForUser(contentResolver,
                     Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, userId);
             Pair<ThemeSettings, Boolean> result = fromJson(jsonString, userId);
