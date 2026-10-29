@@ -162,6 +162,8 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
     private int mAccentSaturation = 100;
     private int mBackgroundSaturation = 100;
     private int mBackgroundLightness = 100;
+    private boolean mAccurateShades = true;
+    private boolean mTintedText = true;
     // Theme variant: Vibrant, Tonal, Expressive, etc
     @VisibleForTesting
     @ThemeStyle.Type
@@ -713,9 +715,9 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
     private void createOverlays(int color) {
         fetchColorTuningFromSetting();
         mDarkColorScheme = new ColorScheme(color, true /* isDark */, mThemeStyle, mContrast,
-                mAccentSaturation, mBackgroundSaturation, mBackgroundLightness);
+                mAccentSaturation, mBackgroundSaturation, mBackgroundLightness, mAccurateShades);
         mLightColorScheme = new ColorScheme(color, false /* isDark */, mThemeStyle, mContrast,
-                mAccentSaturation, mBackgroundSaturation, mBackgroundLightness);
+                mAccentSaturation, mBackgroundSaturation, mBackgroundLightness, mAccurateShades);
         mColorScheme = isNightMode() ? mDarkColorScheme : mLightColorScheme;
 
         mAccentOverlay = newFabricatedOverlay("accent");
@@ -739,9 +741,15 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
             String prefix = "android:color/system_" + p.first;
 
             overlay.setResourceValue(prefix + "_light", TYPE_INT_COLOR_ARGB8,
-                    p.second.getArgb(mLightColorScheme.getMaterialScheme()), null);
+                    textColor(p.first,
+                            p.second.getArgb(mLightColorScheme.getMaterialScheme()),
+                            mLightColorScheme.getMaterialScheme().isDark),
+                    null);
             overlay.setResourceValue(prefix + "_dark", TYPE_INT_COLOR_ARGB8,
-                    p.second.getArgb(mDarkColorScheme.getMaterialScheme()), null);
+                    textColor(p.first,
+                            p.second.getArgb(mDarkColorScheme.getMaterialScheme()),
+                            mDarkColorScheme.getMaterialScheme().isDark),
+                    null);
         });
     }
 
@@ -901,6 +909,8 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
         mAccentSaturation = 100;
         mBackgroundSaturation = 100;
         mBackgroundLightness = 100;
+        mAccurateShades = true;
+        mTintedText = true;
         final String overlayPackageJson = mSecureSettings.getStringForUser(
                 Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
                 mUserTracker.getUserId());
@@ -915,6 +925,9 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
                     object.optInt("android.theme.customization.background_saturation", 100));
             mBackgroundLightness = clampTuning(
                     object.optInt("android.theme.customization.background_lightness", 100));
+            mAccurateShades =
+                    object.optInt("android.theme.customization.accurate_shades", 1) != 0;
+            mTintedText = object.optInt("android.theme.customization.tinted_text", 1) != 0;
         } catch (JSONException e) {
             Log.i(TAG, "Failed to parse color tuning from THEME_CUSTOMIZATION_OVERLAY_PACKAGES.",
                     e);
@@ -923,6 +936,23 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
 
     private static int clampTuning(int value) {
         return Math.max(0, Math.min(200, value));
+    }
+
+    private int textColor(String name, int argb, boolean isDark) {
+        if (mTintedText) {
+            return argb;
+        }
+        return switch (name) {
+            case "on_surface",
+                    "on_surface_variant",
+                    "on_background",
+                    "on_primary_container",
+                    "on_secondary_container",
+                    "on_tertiary_container",
+                    "on_error_container" -> isDark ? Color.WHITE : Color.BLACK;
+            case "on_error" -> isDark ? Color.BLACK : Color.WHITE;
+            default -> argb;
+        };
     }
 
     @ThemeStyle.Type
