@@ -22,14 +22,23 @@ import android.app.PendingIntent
 import android.content.Context
 import android.os.Bundle
 import com.android.systemui.screenrecord.RecordingService
+import com.android.systemui.screenrecord.ScreenRecordUxController
 import com.android.systemui.screenrecord.shared.model.ScreenRecordingParameters
 import com.android.systemui.settings.UserContextProvider
 import javax.inject.Inject
 
 class LegacyScreenRecordingStartStopRepository
 @Inject
-constructor(private val userContextProvider: UserContextProvider) :
-    ScreenRecordingStartStopRepository {
+constructor(
+    private val userContextProvider: UserContextProvider,
+    private val controller: ScreenRecordUxController,
+) : ScreenRecordingStartStopRepository {
+
+    override val isRecording: Boolean
+        get() = controller.isRecording
+
+    override val isStarting: Boolean
+        get() = controller.isStarting
 
     private val options: Bundle = BroadcastOptions.makeBasic().setInteractive(true).toBundle()
     private val userContext: Context

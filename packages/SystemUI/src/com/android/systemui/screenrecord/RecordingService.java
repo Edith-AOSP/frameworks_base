@@ -20,6 +20,7 @@ import static com.android.systemui.screenrecord.ScreenRecordUxController.EXTRA_S
 import static com.android.systemui.screenrecord.ScreenRecordUxController.INTENT_UPDATE_STATE;
 
 import android.annotation.Nullable;
+import android.app.Dialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -41,6 +42,8 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.util.Log;
 import android.view.Display;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -53,6 +56,7 @@ import com.android.systemui.res.R;
 import com.android.systemui.screenrecord.ScreenMediaRecorder.SavedRecording;
 import com.android.systemui.screenrecord.ScreenMediaRecorder.ScreenMediaRecorderListener;
 import com.android.systemui.screenrecord.data.repository.ScreenRecordingPreferenceRepository;
+import com.android.systemui.screenrecord.data.repository.ScreenRecordingStartStopRepository;
 import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 
@@ -103,6 +107,7 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
 
     private final RecordingServiceBinder mBinder;
     private final ScreenRecordUxController mController;
+    private final ScreenRecordingStartStopRepository mStartStopRepository;
     protected final KeyguardDismissUtil mKeyguardDismissUtil;
     private final Handler mMainHandler;
     private ScreenRecordingAudioSource mAudioSource = ScreenRecordingAudioSource.NONE;
@@ -127,8 +132,10 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
             @Main Handler handler, UiEventLogger uiEventLogger,
             NotificationManager notificationManager,
             UserContextProvider userContextTracker, KeyguardDismissUtil keyguardDismissUtil,
-            ScreenRecordingStartTimeStore screenRecordingStartTimeStore) {
+            ScreenRecordingStartTimeStore screenRecordingStartTimeStore,
+            ScreenRecordingStartStopRepository startStopRepository) {
         mController = controller;
+        mStartStopRepository = startStopRepository;
         mLongExecutor = executor;
         mMainHandler = handler;
         mUiEventLogger = uiEventLogger;
@@ -298,7 +305,19 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
                 break;
             case ACTION_SHOW_DIALOG:
                 if (mController != null) {
-                    mController.createScreenRecordDialog(null).show();
+                    Dialog dialog = mController.createScreenRecordDialog(null);
+                    Window window = dialog.getWindow();
+                    if (window != null) {
+                        // This service has no Activity window token. SystemUIDialog's
+                        // default sub-panel type cannot be attached from here.
+                        window.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
+                    }
+                    try {
+                        dialog.show();
+                    } catch (RuntimeException e) {
+                        Log.e(getTag(), "Unable to show screen record dialog", e);
+                        dialog.dismiss();
+                    }
                 }
                 break;
         }
@@ -699,19 +718,19 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
 
         @Override
         public void stopRecording() throws RemoteException {
-            Intent intent = new Intent(RecordingService.this, RecordingService.class);
-            intent.setAction(ACTION_STOP_NOTIF);
-            RecordingService.this.startService(intent);
+            // The screen record dialog may use the newer ScreenRecordingService.
+            // Stop whichever implementation is active, not just this legacy service.
+            mStartStopRepository.stopRecording(StopReason.STOP_UNKNOWN);
         }
 
         @Override
         public boolean isRecording() throws RemoteException {
-            return mController.isRecording();
+            return mStartStopRepository.isRecording();
         }
 
         @Override
         public boolean isStarting() throws RemoteException {
-            return mController.isStarting();
+            return mStartStopRepository.isStarting();
         }
 
         public void addRecordingCallback(IRecordingCallback callback) throws RemoteException {

@@ -229,6 +229,12 @@ constructor(
         }
     }
 
+    override val isRecording: Boolean
+        get() = status.value is Started
+
+    override val isStarting: Boolean
+        get() = status.value is Starting
+
     override fun startRecording(parameters: ScreenRecordingParameters) {
         require(parameters.displayId != Display.INVALID_DISPLAY) { "Provide a valid displayId" }
         statusUpdates.update { currentStatus -> currentStatus as? Started ?: Started(parameters) }
