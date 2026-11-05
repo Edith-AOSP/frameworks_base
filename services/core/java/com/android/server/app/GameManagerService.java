@@ -47,6 +47,7 @@ import android.app.IGameStateListener;
 import android.app.StatsManager;
 import android.app.UidObserver;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -59,6 +60,7 @@ import android.content.res.CompatibilityInfo.CompatScale;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
+import android.database.ContentObserver;
 import android.hardware.power.Mode;
 import android.net.Uri;
 import android.os.Binder;
@@ -80,6 +82,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.Properties;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.AtomicFile;
@@ -116,6 +119,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -151,6 +155,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
             "debug.graphics.game_default_frame_rate.disabled";
     static final String PROPERTY_RO_SURFACEFLINGER_GAME_DEFAULT_FRAME_RATE =
             "ro.surface_flinger.game_default_frame_rate_override";
+    static final String PROPERTY_PERSIST_PERFORMANCE_MODE = 
+            "persist.sys.power_mode_perf";
 
     private static final String PACKAGE_NAME_MSG_KEY = "packageName";
     private static final String USER_ID_MSG_KEY = "userId";
@@ -1589,10 +1595,15 @@ public final class GameManagerService extends IGameManagerService.Stub {
         mPowerManagerInternal.setPowerMode(Mode.GAME_LOADING, false);
         Slog.v(TAG, "Game power mode OFF (game manager service start/restart)");
         mPowerManagerInternal.setPowerMode(Mode.GAME, false);
+        boostGameService(false);
 
         mGameDefaultFrameRateValue = (float) mSysProps.getInt(
                 PROPERTY_RO_SURFACEFLINGER_GAME_DEFAULT_FRAME_RATE, 60);
         Slog.v(TAG, "Game Default Frame Rate : " + mGameDefaultFrameRateValue);
+
+       // Start to observe our Settings.Secure.GAME_OVERLAY
+        // after boot completed.
+        new SettingsObserver(mHandler);
     }
 
     private void sendUserMessage(int userId, int what, String eventForLog, int delayMillis) {
@@ -2323,6 +2334,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     if (!mGameForegroundUids.isEmpty() && mNonGameForegroundUids.isEmpty()) {
                         Slog.v(TAG, "Game power mode OFF (first non-game in foreground)");
                         mPowerManagerInternal.setPowerMode(Mode.GAME, false);
+                        boostGameService(false);
                     }
                     mNonGameForegroundUids.add(uid);
                     return;
@@ -2330,6 +2342,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
                 if (mGameForegroundUids.isEmpty() && mNonGameForegroundUids.isEmpty()) {
                     Slog.v(TAG, "Game power mode ON (first game in foreground)");
                     mPowerManagerInternal.setPowerMode(Mode.GAME, true);
+                    boostGameService(true);
+                    setGameAffinity(uid);
                 }
                 final boolean isGameDefaultFrameRateDisabled =
                         mSysProps.getBoolean(
@@ -2347,15 +2361,106 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     if (mGameForegroundUids.isEmpty() && mNonGameForegroundUids.isEmpty()) {
                         Slog.v(TAG, "Game power mode OFF (no games in foreground)");
                         mPowerManagerInternal.setPowerMode(Mode.GAME, false);
+                        boostGameService(false);
                     }
                 } else if (mNonGameForegroundUids.contains(uid)) {
                     mNonGameForegroundUids.remove(uid);
                     if (mNonGameForegroundUids.isEmpty() && !mGameForegroundUids.isEmpty()) {
                         Slog.v(TAG, "Game power mode ON (only games in foreground)");
                         mPowerManagerInternal.setPowerMode(Mode.GAME, true);
+                        boostGameService(true);
+                        setGameAffinity(uid);
                     }
                 }
             }
         }
+
+        private void setGameAffinity(int uid) {
+            Map<String, Integer> packagePidMap = getRunningGamePidsPerPackage(uid);
+            if (packagePidMap.isEmpty()) {
+                return;
+            }
+            for (Map.Entry<String, Integer> entry : packagePidMap.entrySet()) {
+                int pid = entry.getValue();
+                String packageName = entry.getKey();
+                Slog.v(TAG, "Set affinity for PID=" + pid + " (Package: " + packageName + 
+                        ", UID=" + uid + ") to all cores");
+            }
+        }
+
+        private Map<String, Integer> getRunningGamePidsPerPackage(int targetUid) {
+            Map<String, Integer> packagePidMap = new HashMap<>();
+            ActivityManager am = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) return packagePidMap;
+
+            List<ActivityManager.RunningAppProcessInfo> runningProcesses = am.getRunningAppProcesses();
+            if (runningProcesses == null) return packagePidMap;
+
+            for (ActivityManager.RunningAppProcessInfo processInfo : runningProcesses) {
+                if (processInfo.uid == targetUid) {
+                    String[] packageNames = processInfo.pkgList;
+                    if (packageNames != null) {
+                        for (String packageName : packageNames) {
+                            int userId = ActivityManager.getCurrentUser();
+                            if (isPackageGame(packageName, userId) && !packagePidMap.containsKey(packageName)) {
+                                packagePidMap.put(packageName, processInfo.pid);
+                            }
+                        }
+                    }
+                }
+            }
+            return packagePidMap;
+        }
+
+    }
+
+      class SettingsObserver extends ContentObserver {
+
+        private final ContentResolver mContentResolver;
+
+        SettingsObserver(Handler handler) {
+            super(handler);
+            mContentResolver = mContext.getContentResolver();
+            mContentResolver.registerContentObserver(Settings.Secure.getUriFor(
+                    Settings.Secure.GAME_OVERLAY), false, this,
+                    UserHandle.USER_ALL);
+            }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            synchronized (mDeviceConfigLock) {
+                String newValue = Settings.Secure.getStringForUser(mContentResolver,
+                        Settings.Secure.GAME_OVERLAY, UserHandle.USER_CURRENT);
+                if (newValue == null) return;
+                // We write key and value of the device_config property as a single string
+                // from our GameSpace.
+                // ';;' is the separator betweeen key and value.
+                // Example: com.libremobileos.game;;mode=2,downscaleFactor=0.7:mode=3,downscaleFactor=0.8
+                // So split the key and value from the string
+                // and set the device_config propery.
+                String[] parsedValues = newValue.split(";;");
+                // Value should contain both package name and config.
+                // Otherwise don't do anything.
+                if (parsedValues.length < 2) return;
+                // We don't need to care about any format and all.
+                // It will be handled by the GamePackageConfiguration while
+                // parsing the device_config property.
+                String packageName = parsedValues[0];
+                String configValue = parsedValues[1];
+                DeviceConfig.setProperty(DeviceConfig.NAMESPACE_GAME_OVERLAY,
+                        packageName, configValue, false);
+            }
+        }
+    }
+
+    void boostGameService(boolean enable) {
+        boolean perfModeEnabledByUser = Settings.System.getIntForUser(
+            mContext.getContentResolver(), "power_mode_perf_by_user", 0,
+            UserHandle.USER_CURRENT) == 1;
+        if (perfModeEnabledByUser) return;
+        Settings.System.putIntForUser(mContext.getContentResolver(),
+            PROPERTY_PERSIST_PERFORMANCE_MODE, enable ? 1 : 0,
+            UserHandle.USER_CURRENT);
+        SystemProperties.set(PROPERTY_PERSIST_PERFORMANCE_MODE, enable ? "1" : "0");
     }
 }

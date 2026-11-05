@@ -40,8 +40,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,6 +97,19 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
+
+/**
+ * Optional colours for the quick affordances, supplied by the lock screen when the shortcuts sit
+ * on a surface with its own treatment (for example the expanded media player).
+ */
+@Immutable
+data class KeyguardShortcutColors(val iconTint: Color, val background: Color)
+
+/**
+ * The current shortcut colour override. `null` keeps the stock theme colours; the lock screen
+ * provides a value while the media player is expanded.
+ */
+val LocalKeyguardShortcutColors = compositionLocalOf<KeyguardShortcutColors?> { null }
 
 @SysUISingleton
 class ShortcutElementProvider
@@ -166,12 +181,14 @@ constructor(
         val (pressed, setPressed) = remember { mutableStateOf(false) }
 
         // Tint of the foreground drawable
+        val shortcutColors = LocalKeyguardShortcutColors.current
         val foregroundTint =
-            if (quickAffordanceViewModel.isActivated) {
-                MaterialTheme.colorScheme.onPrimaryFixed
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            }
+            shortcutColors?.iconTint
+                ?: if (quickAffordanceViewModel.isActivated) {
+                    MaterialTheme.colorScheme.onPrimaryFixed
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
 
         failureAnimation(triggerFailed, setTriggerFailed, hapticsViewModel, xAnimation)
 
@@ -330,18 +347,20 @@ constructor(
 
     @Composable
     private fun Modifier.shortcutBackground(viewModel: KeyguardQuickAffordanceViewModel): Modifier {
+        val override = LocalKeyguardShortcutColors.current
         if (!viewModel.isSelected) {
             val isBlurSupported by
                 windowRootViewBlurInteractor.isBlurCurrentlySupported.collectAsStateWithLifecycle()
+            val defaultColor =
+                if (viewModel.isActivated) {
+                    MaterialTheme.colorScheme.primaryFixed
+                } else if (enableLockscreenBlur() && isBlurSupported) {
+                    LocalAndroidColorScheme.current.surfaceEffect1
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                }
             return this.background(
-                color =
-                    if (viewModel.isActivated) {
-                        MaterialTheme.colorScheme.primaryFixed
-                    } else if (enableLockscreenBlur() && isBlurSupported) {
-                        LocalAndroidColorScheme.current.surfaceEffect1
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHigh
-                    },
+                color = override?.background ?: defaultColor,
                 shape = CircleShape,
             )
         }

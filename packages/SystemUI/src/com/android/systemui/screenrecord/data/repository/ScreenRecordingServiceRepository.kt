@@ -229,13 +229,25 @@ constructor(
         }
     }
 
+    override val isRecording: Boolean
+        get() = status.value is Started
+
+    override val isStarting: Boolean
+        get() = status.value is Starting
+
     override fun startRecording(parameters: ScreenRecordingParameters) {
         require(parameters.displayId != Display.INVALID_DISPLAY) { "Provide a valid displayId" }
         statusUpdates.update { currentStatus -> currentStatus as? Started ?: Started(parameters) }
     }
 
     override fun stopRecording(@StopReason reason: Int) {
-        statusUpdates.update { currentStatus -> currentStatus as? Stopped ?: Stopped(reason) }
+        stopRecording(reason, showPostRecordingUi = true)
+    }
+
+    override fun stopRecording(@StopReason reason: Int, showPostRecordingUi: Boolean) {
+        statusUpdates.update { currentStatus ->
+            currentStatus as? Stopped ?: Stopped(reason, showPostRecordingUi)
+        }
     }
 
     /** Update parameters of an ongoing recording */
@@ -259,7 +271,12 @@ constructor(
 
         override fun onSavingRecording(recordingUri: Uri, notificationId: Int) {
             _screenRecording.value =
-                ScreenRecording.Saving(uri = recordingUri, notificationId = notificationId)
+                ScreenRecording.Saving(
+                    uri = recordingUri,
+                    notificationId = notificationId,
+                    showPostRecordingUi =
+                        (statusUpdates.value as? Stopped)?.showPostRecordingUi ?: true,
+                )
         }
 
         override fun onRecordingSaved(recordingUri: Uri, thumbnail: Icon, notificationId: Int) {

@@ -926,13 +926,17 @@ private fun ContentScope.CardForegroundContent(
             )
             Spacer(Modifier.width(6.dp))
             // Shared element with the three-row header's output control so the device name +
-            // chevron slides between its two positions during the morph.
-            Element(key = Media.Elements.OutputControl, modifier = Modifier) {
-                EdithOutputControl(viewModel = viewModel.outputSwitcherChip)
+            // chevron slides between its two positions during the morph. The Box takes the space
+            // not used by the icon and the suggestion chip, so the device name can ellipsize
+            // instead of pushing its chevron out of the card.
+            Box(Modifier.weight(1f)) {
+                Element(key = Media.Elements.OutputControl, modifier = Modifier) {
+                    EdithOutputControl(viewModel = viewModel.outputSwitcherChip)
+                }
             }
+            Spacer(Modifier.width(8.dp))
 
             // Keep the suggested-device chip, right-aligned after the output control.
-            Spacer(Modifier.weight(1f))
             val cardMaxWidth = mediaViewModel.cardMaxWidth
             AnimatedVisibility(
                 visible = viewModel.deviceSuggestionChip != null,

@@ -21,7 +21,15 @@ import com.android.systemui.screenrecord.shared.model.ScreenRecordingParameters
 
 interface ScreenRecordingStartStopRepository {
 
+    val isRecording: Boolean
+
+    val isStarting: Boolean
+
     fun startRecording(parameters: ScreenRecordingParameters)
 
-    fun stopRecording(@StopReason reason: Int)
+    fun stopRecording(@StopReason reason: Int, showPostRecordingUi: Boolean)
+
+    fun stopRecording(@StopReason reason: Int) {
+        stopRecording(reason, showPostRecordingUi = true)
+    }
 }

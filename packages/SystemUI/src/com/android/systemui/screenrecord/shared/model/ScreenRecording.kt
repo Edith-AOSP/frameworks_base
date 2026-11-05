@@ -26,7 +26,12 @@ sealed interface ScreenRecording {
     val notificationId: Int
 
     /** Screen recording is being saved and will be available with the [uri]. */
-    data class Saving(override val uri: Uri, override val notificationId: Int) : ScreenRecording
+    data class Saving(
+        override val uri: Uri,
+        override val notificationId: Int,
+        /** Whether to open the post-recording screen once the video is available. */
+        val showPostRecordingUi: Boolean = true,
+    ) : ScreenRecording
 
     /**
      * Screen recording is saved and is available with the [uri]. You can[thumbnail] when it's

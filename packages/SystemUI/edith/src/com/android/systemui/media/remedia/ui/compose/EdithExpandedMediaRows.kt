@@ -19,6 +19,7 @@ package com.android.systemui.media.remedia.ui.compose
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -59,24 +60,29 @@ internal fun ContentScope.EdithExpandedMediaRows(
     // (sibling, not nested) that morphs/slides between the two scenes.
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        modifier =
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
     ) {
-        Element(key = Media.Elements.ContextHeader, modifier = Modifier) {
-            EdithContextHeader(
-                icon = viewModel.icon,
-                iconTint = colorScheme.primary,
-                appName = viewModel.appName,
-                deviceName = deviceNameFor(viewModel.outputSwitcherChip),
-                modifier = Modifier,
-                // The card body tap expands the lock screen player, so the app is opened
-                // from the header app icon instead (unchanged elsewhere — this is the same
-                // click intent the card body used to run).
-                onAppIconClick = { viewModel.onClick(expandable) },
-            )
+        Box(Modifier.weight(1f, fill = false)) {
+            Element(key = Media.Elements.ContextHeader, modifier = Modifier) {
+                EdithContextHeader(
+                    icon = viewModel.icon,
+                    iconTint = colorScheme.primary,
+                    appName = viewModel.appName,
+                    deviceName = deviceNameFor(viewModel.outputSwitcherChip),
+                    modifier = Modifier,
+                    // The card body tap expands the lock screen player, so the app is opened
+                    // from the header app icon instead (unchanged elsewhere — this is the same
+                    // click intent the card body used to run).
+                    onAppIconClick = { viewModel.onClick(expandable) },
+                )
+            }
         }
         Spacer(Modifier.width(4.dp))
-        Element(key = Media.Elements.OutputControl, modifier = Modifier) {
-            EdithOutputControl(viewModel = viewModel.outputSwitcherChip)
+        Box(Modifier.weight(1f, fill = false)) {
+            Element(key = Media.Elements.OutputControl, modifier = Modifier) {
+                EdithOutputControl(viewModel = viewModel.outputSwitcherChip)
+            }
         }
     }
 

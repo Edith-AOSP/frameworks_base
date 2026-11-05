@@ -44,6 +44,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -136,6 +137,7 @@ constructor(
 
         screenRecordingServiceInteractor.screenRecordings
             .filterIsInstance(ScreenRecording.Saving::class)
+            .filter { it.showPostRecordingUi }
             .onEach { recording ->
                 activityStarter.startActivityDismissingKeyguard(
                     /* intent = */ SmallScreenPostRecordingActivity.waitForRecording(

@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
  * @param seedColors    The list of seed colors used for theme generation.
  * @param contrast      The user-selected contrast level.
  * @param style         The theme style, e.g., TONAL_SPOT, VIBRANT.
+ * @param colorTuning   The relative palette intensity adjustments.
  * @param childProfiles A set of user IDs for associated profiles.
  * @param timeStamp     A timestamp also used to force updates.
  * @hide
@@ -58,13 +59,21 @@ public record ThemeState(
         List<Integer> seedColors,
         float contrast,
         int style,
+        ColorTuning colorTuning,
         Set<Integer> childProfiles,
         long timeStamp
 ) {
     ThemeState(int userId, boolean isSetup, List<Integer> seedColors, float contrast,
             @ThemeStyle.Type Integer style, Set<Integer> childProfiles, long timeStamp) {
+        this(userId, isSetup, seedColors, contrast, style, ColorTuning.DEFAULT, childProfiles,
+                timeStamp);
+    }
+
+    ThemeState(int userId, boolean isSetup, List<Integer> seedColors, float contrast,
+            @ThemeStyle.Type Integer style, ColorTuning colorTuning, Set<Integer> childProfiles,
+            long timeStamp) {
         this(userId, isSetup, Collections.unmodifiableList(new ArrayList<>(seedColors)),
-                contrast, style == null ? 0 : style,
+                contrast, style == null ? 0 : style, colorTuning,
                 Collections.unmodifiableSet(new HashSet<>(childProfiles)),
                 timeStamp); // Delegates to canonical
     }
@@ -91,6 +100,7 @@ public record ThemeState(
                 newSeedColors,
                 contrast,
                 style,
+                colorTuning,
                 childProfiles,
                 timeStamp
         );
@@ -107,6 +117,7 @@ public record ThemeState(
                 seedColors,
                 contrast,
                 newStyle,
+                colorTuning,
                 childProfiles,
                 timeStamp
         );
@@ -123,6 +134,24 @@ public record ThemeState(
                 seedColors,
                 newContrast,
                 style,
+                colorTuning,
+                childProfiles,
+                timeStamp
+        );
+    }
+
+    ThemeState withColorTuning(ColorTuning newColorTuning) {
+        if (colorTuning.equals(newColorTuning)) {
+            return this;
+        }
+
+        return new ThemeState(
+                userId,
+                isSetup,
+                seedColors,
+                contrast,
+                style,
+                newColorTuning,
                 childProfiles,
                 timeStamp
         );
@@ -139,6 +168,7 @@ public record ThemeState(
                 seedColors,
                 contrast,
                 style,
+                colorTuning,
                 childProfiles,
                 timeStamp
         );
@@ -158,6 +188,7 @@ public record ThemeState(
                 seedColors,
                 contrast,
                 style,
+                colorTuning,
                 Collections.unmodifiableSet(newChildProfiles),
                 timeStamp
         );
@@ -171,6 +202,7 @@ public record ThemeState(
                 seedColors,
                 contrast,
                 style,
+                colorTuning,
                 childProfiles,
                 System.currentTimeMillis()
         );
@@ -190,6 +222,9 @@ public record ThemeState(
         pw.println(prefix + "seedColors: [" + hexColors + "]");
         pw.println(prefix + "contrast: " + contrast);
         pw.println(prefix + "style: " + ThemeStyle.toString(style));
+        pw.println(prefix + "colorTuning: accent=" + colorTuning.accentSaturation()
+                + " background=" + colorTuning.backgroundSaturation()
+                + " lightness=" + colorTuning.backgroundLightness());
         pw.println(prefix + "childProfiles: " + childProfiles);
         pw.println(prefix + "timeStamp: " + timeStamp);
     }

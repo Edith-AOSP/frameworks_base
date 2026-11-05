@@ -498,9 +498,10 @@ public class ThemeManagerImpl implements ThemeManagerInternal, ThemeEventDispatc
 
         UiModeManagerInternal uiModeManager = LocalServices.getService(UiModeManagerInternal.class);
         float contrast = uiModeManager != null ? uiModeManager.getContrast(userId) : 0f;
+        ColorTuning colorTuning = mThemeSettingsManager.getColorTuning(userId, resolver);
 
         mStateManager.onUserStart(UserHandle.of(userId), isSetup, seedColors, contrast,
-                userSettings.themeStyle());
+                userSettings.themeStyle(), colorTuning);
     }
 
     /**
@@ -524,6 +525,8 @@ public class ThemeManagerImpl implements ThemeManagerInternal, ThemeEventDispatc
         List<Integer> newSeeds = userSettings.seedColors().stream().map(Color::toArgb).toList();
         mStateManager.onSeedColorChange(userId, newSeeds, true);
         mStateManager.onStyleChange(userId, userSettings.themeStyle());
+        mStateManager.onColorTuningChange(userId,
+                mThemeSettingsManager.getColorTuning(userId, resolver));
     }
 
     /**

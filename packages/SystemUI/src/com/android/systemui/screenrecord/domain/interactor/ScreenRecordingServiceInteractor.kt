@@ -51,7 +51,11 @@ constructor(private val repository: ScreenRecordingServiceRepository) {
     }
 
     fun stopRecording(@StopReason reason: Int) {
-        repository.stopRecording(reason)
+        stopRecording(reason, showPostRecordingUi = true)
+    }
+
+    fun stopRecording(@StopReason reason: Int, showPostRecordingUi: Boolean) {
+        repository.stopRecording(reason, showPostRecordingUi)
     }
 
     /** Updates shouldShowTaps if there is an ongoing recording */

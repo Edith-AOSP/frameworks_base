@@ -20,8 +20,12 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import androidx.compose.runtime.getValue
 import com.android.systemui.dagger.qualifiers.Application
+import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInteractor
+import com.android.systemui.keyguard.shared.model.KeyguardState
 import com.android.systemui.keyguard.ui.composable.elements.UnfoldTranslations
 import com.android.systemui.lifecycle.HydratedActivatable
+import com.android.systemui.qs.edith.ChargingChipStatus
+import com.android.systemui.qs.edith.EdithChargingInteractor
 import com.android.systemui.qs.edith.EdithLockscreenMediaExpansionInteractor
 import com.android.systemui.statusbar.notification.domain.interactor.ActiveNotificationsInteractor
 import com.android.systemui.statusbar.notification.shared.ActiveNotificationModel
@@ -37,6 +41,8 @@ constructor(
     unfoldTransitionInteractor: UnfoldTransitionInteractor,
     activeNotificationsInteractor: ActiveNotificationsInteractor,
     expansionInteractor: EdithLockscreenMediaExpansionInteractor,
+    chargingInteractor: EdithChargingInteractor,
+    keyguardTransitionInteractor: KeyguardTransitionInteractor,
     private val shelfInteractor: NotificationShelfInteractor,
     @Application private val context: Context,
 ) : HydratedActivatable() {
@@ -69,13 +75,6 @@ constructor(
         get() = shownNotifications.size
 
     /**
-     * Background colour of the first shown notification when it asks to be colorized (a red
-     * screen-recording notification, for example), so its circle matches the notification card.
-     */
-    val firstNotificationColor: Int?
-        get() = shownNotifications.firstOrNull()?.backgroundColor
-
-    /**
      * The first app icons of [shownNotifications], in stack order: the first one is drawn large,
      * the rest as the small row.
      *
@@ -97,6 +96,19 @@ constructor(
             traceName = "isMediaExpanded",
             initialValue = false,
         )
+
+    /** 0 while awake, 1 in AOD; dims the lower-region pills as the display dozes. */
+    val dozeAmount: Float by
+        keyguardTransitionInteractor
+            .transitionValue(KeyguardState.AOD)
+            .hydratedStateOf(traceName = "dozeAmount", initialValue = 0f)
+
+    /**
+     * The charging state of the chip shown beside the notification chip, `null` while the device is
+     * not plugged in.
+     */
+    val chargingStatus: ChargingChipStatus? by
+        chargingInteractor.status.hydratedStateOf(traceName = "chargingStatus", initialValue = null)
 
     /** Opens the locked shade, like the notification shelf does. */
     fun openNotifications() {

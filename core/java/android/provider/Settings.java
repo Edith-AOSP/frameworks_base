@@ -7098,6 +7098,20 @@ public final class Settings {
         public static final String VIBRATE_ON_DISCONNECT = "vibrate_on_disconnect";
 
         /**
+         * GameSpace: List of added games by user
+         * @hide
+         */
+        @Readable
+        public static final String GAMESPACE_GAME_LIST = "gamespace_game_list";
+
+        /**
+         * GameSpace: Whether fullscreen intent will be suppressed while in game session
+         * @hide
+         */
+        @Readable
+        public static final String GAMESPACE_SUPPRESS_FULLSCREEN_INTENT = "gamespace_suppress_fullscreen_intent";
+
+        /**
          * Whether to enable advanced reboot
          * @hide
          */
@@ -13967,6 +13981,15 @@ public final class Settings {
         public static final String BERRY_BLACK_THEME = "berry_black_theme";
 
         /**
+         * Our GameSpace can't write to device_config directly [GTS]
+         * Use this as intermediate to pass device_config property
+         * from our GameSpace to com.android.server.app.GameManagerService
+         * so we can set the device_config property from there.
+         * @hide
+         */
+        public static final String GAME_OVERLAY = "game_overlay";
+
+        /**
          * User selectable PIF data.
          * @hide
          */
@@ -14013,6 +14036,13 @@ public final class Settings {
          * @hide
          */
         public static final String NETWORK_TRAFFIC_UNITS = "network_traffic_units";
+
+        /**
+         * Control whether to hide ADB and Developer settings enable status.
+         * @hide
+         */
+        @Readable
+        public static final String HALCYON_SPOOFED_APPS = "halcyon_spoofed_apps";
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to

@@ -20,12 +20,14 @@ import static com.android.systemui.screenrecord.ScreenRecordUxController.EXTRA_S
 import static com.android.systemui.screenrecord.ScreenRecordUxController.INTENT_UPDATE_STATE;
 
 import android.annotation.Nullable;
+import android.app.Dialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.drawable.Icon;
 import android.media.MediaRecorder;
@@ -40,6 +42,8 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.util.Log;
 import android.view.Display;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Toast;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -52,10 +56,12 @@ import com.android.systemui.res.R;
 import com.android.systemui.screenrecord.ScreenMediaRecorder.SavedRecording;
 import com.android.systemui.screenrecord.ScreenMediaRecorder.ScreenMediaRecorderListener;
 import com.android.systemui.screenrecord.data.repository.ScreenRecordingPreferenceRepository;
+import com.android.systemui.screenrecord.data.repository.ScreenRecordingStartStopRepository;
 import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
@@ -94,11 +100,14 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
     protected static final String ACTION_STOP = "com.android.systemui.screenrecord.STOP";
     protected static final String ACTION_STOP_NOTIF =
             "com.android.systemui.screenrecord.STOP_FROM_NOTIF";
+    private static final String ACTION_SHOW_DIALOG = "com.android.systemui.screenrecord.SHOW_DIALOG";
     protected static final String ACTION_SHARE = "com.android.systemui.screenrecord.SHARE";
     private static final String PERMISSION_SELF = "com.android.systemui.permission.SELF";
     protected static final String EXTRA_NOTIFICATION_ID = "notification_id";
 
+    private final RecordingServiceBinder mBinder;
     private final ScreenRecordUxController mController;
+    private final ScreenRecordingStartStopRepository mStartStopRepository;
     protected final KeyguardDismissUtil mKeyguardDismissUtil;
     private final Handler mMainHandler;
     private ScreenRecordingAudioSource mAudioSource = ScreenRecordingAudioSource.NONE;
@@ -123,8 +132,10 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
             @Main Handler handler, UiEventLogger uiEventLogger,
             NotificationManager notificationManager,
             UserContextProvider userContextTracker, KeyguardDismissUtil keyguardDismissUtil,
-            ScreenRecordingStartTimeStore screenRecordingStartTimeStore) {
+            ScreenRecordingStartTimeStore screenRecordingStartTimeStore,
+            ScreenRecordingStartStopRepository startStopRepository) {
         mController = controller;
+        mStartStopRepository = startStopRepository;
         mLongExecutor = executor;
         mMainHandler = handler;
         mUiEventLogger = uiEventLogger;
@@ -132,6 +143,7 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
         mUserContextTracker = userContextTracker;
         mKeyguardDismissUtil = keyguardDismissUtil;
         mScreenRecordingStartTimeStore = screenRecordingStartTimeStore;
+        mBinder = new RecordingServiceBinder();
     }
 
     /**
@@ -291,18 +303,42 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
                 // Close quick shade
                 closeSystemDialogs();
                 break;
+            case ACTION_SHOW_DIALOG:
+                if (mController != null) {
+                    Dialog dialog = mController.createScreenRecordDialog(null);
+                    Window window = dialog.getWindow();
+                    if (window != null) {
+                        // This service has no Activity window token. SystemUIDialog's
+                        // default sub-panel type cannot be attached from here.
+                        window.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
+                    }
+                    try {
+                        dialog.show();
+                    } catch (RuntimeException e) {
+                        Log.e(getTag(), "Unable to show screen record dialog", e);
+                        dialog.dismiss();
+                    }
+                }
+                break;
         }
         return Service.START_STICKY;
     }
 
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return mBinder;
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
+        mController.addCallback((ScreenRecordUxController.StateChangeCallback) mBinder);
+    }
+
+    @Override
+    public void onDestroy() {
+        mController.removeCallback((ScreenRecordUxController.StateChangeCallback) mBinder);
+        super.onDestroy();
     }
 
     @Nullable
@@ -665,6 +701,70 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
             Log.d(getTag(), "Stopping recording for user " + userId
                     + " because the system requested the stop");
             stopService(userId, stopReason);
+        }
+    }
+
+    private class RecordingServiceBinder extends IRemoteRecording.Stub
+            implements ScreenRecordUxController.StateChangeCallback {
+
+        private ArrayList<IRecordingCallback> mCallbackList = new ArrayList<>();
+
+        @Override
+        public void startRecording() throws RemoteException {
+            Intent intent = new Intent(RecordingService.this, RecordingService.class);
+            intent.setAction(ACTION_SHOW_DIALOG);
+            RecordingService.this.startService(intent);
+        }
+
+        @Override
+        public void stopRecording() throws RemoteException {
+            // The screen record dialog may use the newer ScreenRecordingService.
+            // Stop whichever implementation is active, not just this legacy service.
+            // This binder is only reached from outside SystemUI, so the caller owns the
+            // follow-up UI; do not open the post-recording screen over it.
+            mStartStopRepository.stopRecording(StopReason.STOP_UNKNOWN, false);
+        }
+
+        @Override
+        public boolean isRecording() throws RemoteException {
+            return mStartStopRepository.isRecording();
+        }
+
+        @Override
+        public boolean isStarting() throws RemoteException {
+            return mStartStopRepository.isStarting();
+        }
+
+        public void addRecordingCallback(IRecordingCallback callback) throws RemoteException {
+            if (!mCallbackList.contains(callback)) {
+                mCallbackList.add(callback);
+            }
+        }
+
+        public void removeRecordingCallback(IRecordingCallback callback) throws RemoteException {
+            mCallbackList.remove(callback);
+        }
+
+        @Override
+        public void onRecordingStart() {
+            for (IRecordingCallback callback : mCallbackList) {
+                try {
+                    callback.onRecordingStart();
+                } catch (RemoteException e) {
+                    // do nothing
+                }
+            }
+        }
+
+        @Override
+        public void onRecordingEnd() {
+            for (IRecordingCallback callback : mCallbackList) {
+                try {
+                    callback.onRecordingEnd();
+                } catch (RemoteException e) {
+                    // do nothing
+                }
+            }
         }
     }
 }
