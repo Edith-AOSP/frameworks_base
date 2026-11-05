@@ -40,7 +40,11 @@ sealed interface ScreenRecordingStatus {
     }
 
     /** @see ScreenRecordingStatus */
-    data class Stopped(val reason: Int) : ScreenRecordingStatus {
+    data class Stopped(
+        val reason: Int,
+        /** Whether the caller still wants the post-recording screen for this stop. */
+        val showPostRecordingUi: Boolean = true,
+    ) : ScreenRecordingStatus {
 
         override val isRecording: Boolean = false
 

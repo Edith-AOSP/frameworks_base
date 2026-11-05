@@ -27,5 +27,9 @@ interface ScreenRecordingStartStopRepository {
 
     fun startRecording(parameters: ScreenRecordingParameters)
 
-    fun stopRecording(@StopReason reason: Int)
+    fun stopRecording(@StopReason reason: Int, showPostRecordingUi: Boolean)
+
+    fun stopRecording(@StopReason reason: Int) {
+        stopRecording(reason, showPostRecordingUi = true)
+    }
 }

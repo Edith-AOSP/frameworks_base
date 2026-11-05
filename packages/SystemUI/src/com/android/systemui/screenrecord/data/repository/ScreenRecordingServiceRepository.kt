@@ -241,7 +241,13 @@ constructor(
     }
 
     override fun stopRecording(@StopReason reason: Int) {
-        statusUpdates.update { currentStatus -> currentStatus as? Stopped ?: Stopped(reason) }
+        stopRecording(reason, showPostRecordingUi = true)
+    }
+
+    override fun stopRecording(@StopReason reason: Int, showPostRecordingUi: Boolean) {
+        statusUpdates.update { currentStatus ->
+            currentStatus as? Stopped ?: Stopped(reason, showPostRecordingUi)
+        }
     }
 
     /** Update parameters of an ongoing recording */
@@ -265,7 +271,12 @@ constructor(
 
         override fun onSavingRecording(recordingUri: Uri, notificationId: Int) {
             _screenRecording.value =
-                ScreenRecording.Saving(uri = recordingUri, notificationId = notificationId)
+                ScreenRecording.Saving(
+                    uri = recordingUri,
+                    notificationId = notificationId,
+                    showPostRecordingUi =
+                        (statusUpdates.value as? Stopped)?.showPostRecordingUi ?: true,
+                )
         }
 
         override fun onRecordingSaved(recordingUri: Uri, thumbnail: Icon, notificationId: Int) {

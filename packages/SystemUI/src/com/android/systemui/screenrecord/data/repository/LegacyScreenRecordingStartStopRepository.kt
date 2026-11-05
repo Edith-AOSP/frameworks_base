@@ -66,7 +66,7 @@ constructor(
             .send(options)
     }
 
-    override fun stopRecording(reason: Int) {
+    override fun stopRecording(reason: Int, showPostRecordingUi: Boolean) {
         PendingIntent.getService(
                 userContext,
                 RecordingService.REQUEST_CODE,

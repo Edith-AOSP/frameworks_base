@@ -720,7 +720,9 @@ public class RecordingService extends Service implements ScreenMediaRecorderList
         public void stopRecording() throws RemoteException {
             // The screen record dialog may use the newer ScreenRecordingService.
             // Stop whichever implementation is active, not just this legacy service.
-            mStartStopRepository.stopRecording(StopReason.STOP_UNKNOWN);
+            // This binder is only reached from outside SystemUI, so the caller owns the
+            // follow-up UI; do not open the post-recording screen over it.
+            mStartStopRepository.stopRecording(StopReason.STOP_UNKNOWN, false);
         }
 
         @Override
