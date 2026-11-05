@@ -20,23 +20,17 @@ import android.content.Context;
 import android.os.UserHandle;
 import android.provider.Settings;
 
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 /**
  * Utility to manage user-selected app spoofing.
  */
 public class UserSelectedSpoofUtils {
 
-    // Key in Settings.Secure to store user-selected apps
-    private static final String SPOOFED_APPS_KEY = "EDITH_SPOOFED_APPS";
+    private static final String ENTRY_SEPARATOR = ",";
+    private static final String VALUE_SEPARATOR = ":";
 
     /**
      * Return true if this app should be spoofed dynamically by the user.
@@ -61,25 +55,22 @@ public class UserSelectedSpoofUtils {
      * Get the full map of user-selected apps to their spoof profile.
      */
     public static Map<String, String> getUserSelectedAppsMap(Context context) {
+        return getUserSelectedAppsMap(context, UserHandle.myUserId());
+    }
+
+    private static Map<String, String> getUserSelectedAppsMap(Context context, int userId) {
         Map<String, String> map = new HashMap<>();
-        if (context == null) return map;
+        if (context == null || userId < 0) return map;
 
         ContentResolver cr = context.getContentResolver();
-        String raw = Settings.Secure.getString(cr, SPOOFED_APPS_KEY);
+        String raw = Settings.Secure.getStringForUser(cr, Settings.Secure.EDITH_SPOOFED_APPS, userId);
         if (raw == null || raw.isEmpty()) return map;
 
-        try {
-            JSONObject obj = new JSONObject(raw);
-            JSONArray keys = obj.names();
-            if (keys != null) {
-                for (int i = 0; i < keys.length(); i++) {
-                    String pkg = keys.getString(i);
-                    String profile = obj.getString(pkg);
-                    map.put(pkg, profile);
-                }
+        for (String entry : raw.split(ENTRY_SEPARATOR)) {
+            int separator = entry.indexOf(VALUE_SEPARATOR);
+            if (separator > 0 && separator < entry.length() - 1) {
+                map.put(entry.substring(0, separator), entry.substring(separator + 1));
             }
-        } catch (JSONException e) {
-            // Ignore invalid JSON
         }
 
         return map;
@@ -99,7 +90,7 @@ public class UserSelectedSpoofUtils {
     private static void putAppForUser(Context context, String packageName, String profile, int userId, Action action) {
         if (context == null || userId < 0) return;
 
-        Map<String, String> apps = getUserSelectedAppsMap(context);
+        Map<String, String> apps = getUserSelectedAppsMap(context, userId);
 
         switch (action) {
             case ADD:
@@ -113,12 +104,17 @@ public class UserSelectedSpoofUtils {
                 }
                 break;
             case SET:
-                // Do nothing, placeholder
+                apps.clear();
                 break;
         }
 
-        JSONObject json = new JSONObject(apps);
-        Settings.Secure.putStringForUser(context.getContentResolver(), SPOOFED_APPS_KEY, json.toString(), userId);
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> entry : apps.entrySet()) {
+            if (sb.length() > 0) sb.append(ENTRY_SEPARATOR);
+            sb.append(entry.getKey()).append(VALUE_SEPARATOR).append(entry.getValue());
+        }
+        Settings.Secure.putStringForUser(context.getContentResolver(),
+                Settings.Secure.EDITH_SPOOFED_APPS, sb.toString(), userId);
     }
 
     /** Add an app to user-selected spoof list */

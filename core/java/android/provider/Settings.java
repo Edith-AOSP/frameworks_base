@@ -14038,11 +14038,12 @@ public final class Settings {
         public static final String NETWORK_TRAFFIC_UNITS = "network_traffic_units";
 
         /**
-         * Control whether to hide ADB and Developer settings enable status.
+         * Packages selected by the user for per-app property spoofing, stored as
+         * comma-separated {@code package:profile} entries.
          * @hide
          */
         @Readable
-        public static final String HALCYON_SPOOFED_APPS = "halcyon_spoofed_apps";
+        public static final String EDITH_SPOOFED_APPS = "edith_spoofed_apps";
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
